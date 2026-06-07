@@ -41,4 +41,8 @@ Production-grade plumbing for services that talk to LLMs.
 
 <br />
 
-<p align="center"><sub>Smart&ensp;·&ensp;Präzise&ensp;·&ensp;Wertig&ensp;·&ensp;Verlässlich</sub></p>
+<p align="center">
+  <sub>Smart&ensp;·&ensp;Präzise&ensp;·&ensp;Wertig&ensp;·&ensp;Verlässlich</sub>
+  <br />
+  <sub><em>Smart&ensp;·&ensp;Precise&ensp;·&ensp;Well-crafted&ensp;·&ensp;Reliable</em></sub>
+</p>
