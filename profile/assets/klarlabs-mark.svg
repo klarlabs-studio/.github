@@ -1,4 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- "kl" in DM Mono Medium, outlined — Klarlabs Teal on ink tile -->
   <rect width="512" height="512" rx="112" fill="#09090B"/>
-  <path d="M160 112v288M160 272l128-128M200 232L320 400" stroke="#0D9488" stroke-width="40" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <g transform="translate(63.2 371.2) scale(0.32 -0.32)" fill="#0D9488">
+    <path d="M98 0V720H204V288L394 496H527L320 276V268L554 0H425L204 255V0Z"/>
+    <path transform="translate(600 0)" d="M68 0V92H234V595Q234 628 202 628H82V720H221Q279 720 309.5 689.5Q340 659 340 601V92H507V0Z"/>
+  </g>
 </svg>
