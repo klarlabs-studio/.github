@@ -14,28 +14,28 @@
 
 Memory, execution, and state for trustworthy agents.
 
-| | |
-| --- | --- |
+| Project | Description |
+| :-- | :-- |
 | [**mnemos**](https://github.com/klarlabs-studio/mnemos) | Self-hosted memory + evidence layer for AI agents — bitemporal recall, evidence-backed claims, no vendor cloud. Wrappers: [Python](https://github.com/klarlabs-studio/mnemos-py), [TypeScript](https://github.com/klarlabs-studio/mnemos-ts) |
-| [**axi-go**](https://github.com/klarlabs-studio/axi-go) | Safe, auditable execution kernel for agent tools — approval gates, budgets, evidence trails |
-| [**agent-go**](https://github.com/klarlabs-studio/agent-go) | State-driven agent runtime for Go — trust through structural constraints |
+| [**axi&#8209;go**](https://github.com/klarlabs-studio/axi-go) | Safe, auditable execution kernel for agent tools — approval gates, budgets, evidence trails |
+| [**agent&#8209;go**](https://github.com/klarlabs-studio/agent-go) | State-driven agent runtime for Go — trust through structural constraints |
 | [**nomi**](https://github.com/klarlabs-studio/nomi) | Local-first AI agent platform — plan-review before execution, BYO LLM |
 | [**scout**](https://github.com/klarlabs-studio/scout) | Browser automation in one binary — library, CLI, MCP server |
-| [**mcp-go**](https://github.com/klarlabs-studio/mcp-go) | Go framework for building MCP servers |
+| [**mcp&#8209;go**](https://github.com/klarlabs-studio/mcp-go) | Go framework for building MCP servers |
 
 ### Resilience & observability
 
 Production-grade plumbing for services that talk to LLMs.
 
-| | |
-| --- | --- |
+| Project | Description |
+| :-- | :-- |
 | [**fortify**](https://github.com/klarlabs-studio/fortify) | Composable resilience patterns for Go — circuit breaker, retry, hedge, cost budget. Zero core deps. Also in [TypeScript](https://github.com/klarlabs-studio/fortify-ts) |
 | [**bolt**](https://github.com/klarlabs-studio/bolt) | Go logging that balances performance, developer experience, and observability |
 
 ### Developer tooling
 
-| | |
-| --- | --- |
+| Project | Description |
+| :-- | :-- |
 | [**coverctl**](https://github.com/klarlabs-studio/coverctl) | Coverage feedback for AI coding agents — every language, via MCP and CLI |
 | [**statekit**](https://github.com/klarlabs-studio/statekit) | Go-native statechart engine, XState JSON compatible |
 
