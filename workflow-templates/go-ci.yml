@@ -21,8 +21,11 @@ jobs:
     permissions:
       contents: read
       security-events: write
+      pull-requests: write   # required — the reusable's nox job annotates PRs
     secrets: inherit
     # with:
-    #   coverage: false      # repos without a coverage threshold yet
-    #   benchmark: true      # perf-sensitive libs (bolt, fortify)
-    #   cross-platform: false
+    #   coverage: false           # repos without a coverage threshold yet
+    #   benchmark: true           # perf-sensitive libs (bolt, fortify)
+    #   cross-platform: false     # pure-logic libs (no OS-specific code)
+    #   go-version: "1.26.3"      # match go.mod if newer than the 1.25 default
+    #   golangci-version: "v2.12.2"  # use a go1.26-built lint binary for go1.26 modules
