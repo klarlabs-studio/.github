@@ -16,7 +16,7 @@ Memory, execution, and state for trustworthy agents.
 
 | Project | Description |
 | :-- | :-- |
-| [**mnemos**](https://github.com/klarlabs-studio/mnemos) | Self-hosted memory + evidence layer for AI agents — bitemporal recall, evidence-backed claims, no vendor cloud. Wrappers: [Python](https://github.com/klarlabs-studio/mnemos-py), [TypeScript](https://github.com/klarlabs-studio/mnemos-ts) |
+| [**mnemos**](https://github.com/klarlabs-studio/mnemos) | Self-hosted memory + evidence layer for AI agents — bitemporal recall, evidence-backed claims, no vendor cloud |
 | [**axi&#8209;go**](https://github.com/klarlabs-studio/axi-go) | Safe, auditable execution kernel for agent tools — approval gates, budgets, evidence trails |
 | [**agent&#8209;go**](https://github.com/klarlabs-studio/agent-go) | State-driven agent runtime for Go — trust through structural constraints |
 | [**nomi**](https://github.com/klarlabs-studio/nomi) | Local-first AI agent platform — plan-review before execution, BYO LLM |
