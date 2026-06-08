@@ -1,0 +1,148 @@
+# Reusable Go CI — the klarlabs-studio engineering bar in one place.
+#
+# Enforces, on every PR and push to main: formatting, golangci-lint
+# (with gocritic), race tests, coverage gate (coverctl check), and a
+# nox security scan (SARIF -> code scanning). Cost-aware by default:
+# concurrency-cancel, setup-go cache, docs-only paths ignored, and the
+# macOS/Windows matrix runs only on push-to-main (never on PRs).
+#
+# Call it from a repo with a thin wrapper (see go-ci-caller-example.yml):
+#
+#   jobs:
+#     ci:
+#       uses: klarlabs-studio/.github/.github/workflows/go-ci.yml@main
+#       permissions:
+#         contents: read
+#         security-events: write
+#       secrets: inherit
+#
+# Bump pinned action/tool versions here once; every caller picks it up.
+on:
+  workflow_call:
+    inputs:
+      go-version:
+        type: string
+        default: "1.25"
+      golangci-version:
+        type: string
+        default: "v2.7.2"
+      nox-version:
+        type: string
+        default: "v0.8.1"
+      coverage:
+        description: "Run the coverctl coverage gate (set false for repos without a threshold yet)."
+        type: boolean
+        default: true
+      cross-platform:
+        description: "Add macOS + Windows to the test matrix on push-to-main."
+        type: boolean
+        default: true
+      benchmark:
+        description: "Run go test -bench on push-to-main only (off by default to save minutes)."
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # PRs: ubuntu only (macOS = 10x, Windows = 2x runner cost).
+        # Push to main: full matrix when cross-platform is enabled.
+        os: ${{ (github.event_name != 'pull_request' && inputs.cross-platform) && fromJSON('["ubuntu-latest","macos-latest","windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ inputs.go-version }}
+          cache: true
+      - run: go mod download
+      - run: go mod verify
+      - name: Test (race + coverage)
+        shell: bash
+        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+      - name: Coverage gate
+        if: inputs.coverage && runner.os == 'Linux'
+        run: |
+          go install go.klarlabs.de/coverctl@latest
+          coverctl check --profile=coverage.out
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ inputs.go-version }}
+          cache: true
+      - name: golangci-lint (gocritic enforced via .golangci.yml)
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
+        with:
+          version: ${{ inputs.golangci-version }}
+          args: --timeout=5m ./...
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ inputs.go-version }}
+          cache: true
+      - run: go build -v ./...
+
+  security:
+    name: Security (nox)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ inputs.go-version }}
+          cache: true
+      - name: Install nox
+        run: |
+          go install github.com/nox-hq/nox/cli@${{ inputs.nox-version }}
+          mv "$(go env GOPATH)/bin/cli" "$(go env GOPATH)/bin/nox"
+      - name: Scan
+        # Source-built nox exits 1 on baselined findings (upstream quirk);
+        # code-scanning alerts are the source of truth, not the exit code.
+        run: |
+          mkdir -p nox-out
+          nox -format sarif,cdx -output nox-out scan . || true
+          test -s nox-out/results.sarif
+      - name: Upload SARIF
+        if: always() && hashFiles('nox-out/results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4
+        with:
+          sarif_file: nox-out/results.sarif
+
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+
+  benchmark:
+    name: Benchmark
+    if: github.event_name != 'pull_request' && inputs.benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ inputs.go-version }}
+          cache: true
+      - run: go test -bench=. -benchmem -run=^$ ./...

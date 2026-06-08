@@ -1,0 +1,6 @@
+{
+  "name": "klarlabs Go CI",
+  "description": "Shared engineering bar: fmt, golangci-lint (gocritic), race tests, coverctl gate, nox SARIF. Cost-aware matrix.",
+  "iconName": "go",
+  "categories": ["Go", "Continuous integration"]
+}
