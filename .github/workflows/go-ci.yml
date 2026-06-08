@@ -27,8 +27,13 @@ on:
         type: string
         default: "v2.7.2"
       nox-version:
+        description: "nox release version (no leading v)."
         type: string
-        default: "v0.8.1"
+        default: "0.8.1"
+      nox-sha256:
+        description: "sha256 of nox_<version>_linux_amd64.tar.gz (verify on bump)."
+        type: string
+        default: "ef9a68166fe571f4db697e6f074c138678917f1290a499bd956b1ae66eb4cf93"
       coverage:
         description: "Run the coverctl coverage gate (set false for repos without a threshold yet)."
         type: boolean
@@ -102,28 +107,52 @@ jobs:
   security:
     name: Security (nox)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write   # nox annotate
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version: ${{ inputs.go-version }}
-          cache: true
-      - name: Install nox
+      - name: Install nox (pinned + sha256-verified binary)
+        env:
+          NOX_VERSION: ${{ inputs.nox-version }}
+          NOX_SHA256: ${{ inputs.nox-sha256 }}
         run: |
-          go install github.com/nox-hq/nox/cli@${{ inputs.nox-version }}
-          mv "$(go env GOPATH)/bin/cli" "$(go env GOPATH)/bin/nox"
+          curl -sL -o nox.tar.gz \
+            "https://github.com/nox-hq/nox/releases/download/v${NOX_VERSION}/nox_${NOX_VERSION}_linux_amd64.tar.gz"
+          echo "${NOX_SHA256}  nox.tar.gz" | sha256sum -c -
+          tar xzf nox.tar.gz && sudo mv nox /usr/local/bin/ && nox version
       - name: Scan
-        # Source-built nox exits 1 on baselined findings (upstream quirk);
-        # code-scanning alerts are the source of truth, not the exit code.
-        run: |
-          mkdir -p nox-out
-          nox -format sarif,cdx -output nox-out scan . || true
-          test -s nox-out/results.sarif
-      - name: Upload SARIF
-        if: always() && hashFiles('nox-out/results.sarif') != ''
+        # Release binaries exit non-zero on any unsuppressed finding; the
+        # gate step below decides what is actually fatal (net-new crit/high).
+        run: nox scan . -format json,sarif -output nox-results || true
+      - name: Upload SARIF to code scanning
+        if: always() && hashFiles('nox-results/findings.sarif') != ''
         uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4
         with:
-          sarif_file: nox-out/results.sarif
+          sarif_file: nox-results/findings.sarif
+      - name: Annotate PR
+        if: github.event_name == 'pull_request' && hashFiles('nox-results/findings.json') != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: nox annotate -input nox-results/findings.json || true
+      - name: Gate on net-new critical/high findings
+        if: always() && hashFiles('nox-results/findings.json') != ''
+        run: |
+          new=$(jq '[.findings[]? | select((.Severity=="critical" or .Severity=="high") and (.Status!="baselined"))] | length' nox-results/findings.json 2>/dev/null || echo 0)
+          echo "unbaselined critical/high: $new"
+          if [ "$new" -gt 0 ]; then
+            echo "::error::Net-new critical/high findings. Run 'nox baseline add' or remediate."
+            jq '.findings[] | select((.Severity=="critical" or .Severity=="high") and (.Status!="baselined")) | {severity:.Severity, rule:.RuleID, file:.Location.FilePath, line:.Location.StartLine}' nox-results/findings.json
+            exit 1
+          fi
+      - name: Upload nox artifacts
+        if: always() && hashFiles('nox-results/**') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nox-results
+          path: nox-results/
+          retention-days: 7
 
   dependency-review:
     name: Dependency Review
