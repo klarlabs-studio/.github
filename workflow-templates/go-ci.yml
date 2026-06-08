@@ -1,0 +1,28 @@
+# Thin caller for the shared klarlabs-studio Go CI bar.
+# Drop this in as .github/workflows/ci.yml. All gate logic lives in the
+# reusable workflow — bump versions / add jobs there, once, org-wide.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
+  pull_request:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: klarlabs-studio/.github/.github/workflows/go-ci.yml@main
+    permissions:
+      contents: read
+      security-events: write
+    secrets: inherit
+    # with:
+    #   coverage: false      # repos without a coverage threshold yet
+    #   benchmark: true      # perf-sensitive libs (bolt, fortify)
+    #   cross-platform: false
