@@ -130,6 +130,16 @@ jobs:
             "https://github.com/nox-hq/nox/releases/download/v${NOX_VERSION}/nox_${NOX_VERSION}_linux_amd64.tar.gz"
           echo "${NOX_SHA256}  nox.tar.gz" | sha256sum -c -
           tar xzf nox.tar.gz && sudo mv nox /usr/local/bin/ && nox version
+      - name: Install cosign
+        # nox verifies plugin signatures by shelling out to cosign. Without
+        # it, signed plugins can't be promoted past "unverified" and install
+        # is blocked under the default community-trust policy.
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Install taint-analysis plugin
+        # nox owns code-level SAST: source-to-sink taint (SSRF, injection,
+        # path traversal). The plugin is cosign-signed; with cosign present
+        # nox promotes it to community trust and installs it (no bypass).
+        run: nox plugin install nox/taint-analysis
       - name: Scan
         # Release binaries exit non-zero on any unsuppressed finding; the
         # gate step below decides what is actually fatal (net-new crit/high).
