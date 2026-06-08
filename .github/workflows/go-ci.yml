@@ -130,13 +130,6 @@ jobs:
             "https://github.com/nox-hq/nox/releases/download/v${NOX_VERSION}/nox_${NOX_VERSION}_linux_amd64.tar.gz"
           echo "${NOX_SHA256}  nox.tar.gz" | sha256sum -c -
           tar xzf nox.tar.gz && sudo mv nox /usr/local/bin/ && nox version
-      - name: Install taint-analysis plugin
-        # nox owns code-level security SAST: cross-file + interprocedural
-        # taint (SSRF, injection, path traversal). This is the layer gosec
-        # used to cover per-function; nox does it across files and is the
-        # authoritative owner. Degrade gracefully if the registry is down —
-        # the scan still runs its built-in rules.
-        run: nox plugin install nox/taint-analysis || echo "::warning::nox taint-analysis plugin unavailable; cross-file taint SAST skipped this run"
       - name: Scan
         # Release binaries exit non-zero on any unsuppressed finding; the
         # gate step below decides what is actually fatal (net-new crit/high).
