@@ -1,18 +1,21 @@
 # Reference .golangci.yml for klarlabs-studio Go repos (golangci-lint v2).
 # Copy to a repo's root as `.golangci.yml`. gocritic is part of the bar —
 # keep it enabled. Add repo-specific exclusions under `exclusions.rules`.
+#
+# Security is owned by nox (secrets, IaC, deps, AI patterns, and code-level
+# SAST incl. cross-file/interprocedural taint via the taint-analysis plugin).
+# gosec is intentionally NOT enabled here — golangci stays focused on code
+# quality + correctness; nox is the single security tool. See the Security
+# job in .github/workflows/go-ci.yml and nox.reference.yaml.
 version: "2"
 
 run:
   timeout: 5m
 
 linters:
-  # Mandatory org bar. gocritic is non-negotiable. gosec keeps the cheap,
-  # deterministic Go checks (hardcoded creds, weak crypto, int overflow,
-  # file perms); cross-file/interprocedural TAINT SAST (SSRF, injection,
-  # path traversal) is owned by nox's taint-analysis plugin — not gosec —
-  # so the experimental gosec taint rules are disabled below. gocyclo/dupl
-  # are intentionally NOT here (noisy, repo-specific; opt in per repo).
+  # Mandatory org bar — code quality + correctness only. gocritic is
+  # non-negotiable. gocyclo/dupl are intentionally NOT here (noisy,
+  # repo-specific; opt in per repo). gosec is NOT here — security is nox's.
   default: standard
   enable:
     - errcheck
@@ -24,21 +27,6 @@ linters:
     - unconvert
     - unparam
     - gocritic     # org engineering bar — do not drop
-    - gosec
-  settings:
-    gosec:
-      excludes:
-        # Taint analysis is nox's job (cross-file, interprocedural). gosec's
-        # per-function taint rules are experimental and FP-prone; defer to nox.
-        - G703   # path traversal via taint
-        - G704   # SSRF via taint
-        - G706   # taint flow (misc)
-  exclusions:
-    rules:
-      # Tests legitimately use math/rand (deterministic fixtures, fuzz
-      # seeds). G404 weak-RNG does not apply to test code.
-      - path: _test\.go
-        linters: [gosec]
 
 formatters:
   enable:
