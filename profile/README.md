@@ -22,6 +22,7 @@ Memory, execution, and state for trustworthy agents.
 | [**nomi**](https://github.com/klarlabs-studio/nomi) | Local-first AI agent platform — plan-review before execution, BYO LLM |
 | [**scout**](https://github.com/klarlabs-studio/scout) | Browser automation in one binary — library, CLI, MCP server |
 | [**mcp&#8209;go**](https://github.com/klarlabs-studio/mcp-go) | Go framework for building MCP servers |
+| [**briefkasten**](https://github.com/klarlabs-studio/briefkasten) | Email retrieval and sending as an MCP server |
 
 ### Resilience & observability
 
@@ -31,6 +32,7 @@ Production-grade plumbing for services that talk to LLMs.
 | :-- | :-- |
 | [**fortify**](https://github.com/klarlabs-studio/fortify) | Composable resilience patterns for Go — circuit breaker, retry, hedge, cost budget. Zero core deps. Also in [TypeScript](https://github.com/klarlabs-studio/fortify-ts) |
 | [**bolt**](https://github.com/klarlabs-studio/bolt) | Go logging that balances performance, developer experience, and observability |
+| [**auth&#8209;go**](https://github.com/klarlabs-studio/auth-go) | Strict-DDD auth for Go — magic link, password (argon2id), TOTP, passkeys, sessions. Storage-agnostic ports + adapters |
 
 ### Developer tooling
 
