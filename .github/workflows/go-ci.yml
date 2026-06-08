@@ -34,6 +34,10 @@ on:
         description: "sha256 of nox_<version>_linux_amd64.tar.gz (verify on bump)."
         type: string
         default: "ef9a68166fe571f4db697e6f074c138678917f1290a499bd956b1ae66eb4cf93"
+      nox-strict:
+        description: "Fail on net-new critical/high even before a baseline exists. Default: gate only once a baseline is committed."
+        type: boolean
+        default: false
       coverage:
         description: "Run the coverctl coverage gate (set false for repos without a threshold yet)."
         type: boolean
@@ -137,13 +141,26 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: nox annotate -input nox-results/findings.json || true
       - name: Gate on net-new critical/high findings
+        # Self-adjusting: enforce only once the repo has an established nox
+        # baseline (at least one finding marked "baselined", or nox-strict
+        # set). Un-baselined repos are report-only so adopting the shared
+        # workflow never breaks a red build — run `nox baseline add` once to
+        # turn enforcement on. Baselined repos gate on net-new crit/high.
         if: always() && hashFiles('nox-results/findings.json') != ''
+        env:
+          NOX_STRICT: ${{ inputs.nox-strict }}
         run: |
-          new=$(jq '[.findings[]? | select((.Severity=="critical" or .Severity=="high") and (.Status!="baselined"))] | length' nox-results/findings.json 2>/dev/null || echo 0)
-          echo "unbaselined critical/high: $new"
+          f=nox-results/findings.json
+          baselined=$(jq '[.findings[]? | select(.Status=="baselined")] | length' "$f" 2>/dev/null || echo 0)
+          new=$(jq '[.findings[]? | select((.Severity=="critical" or .Severity=="high") and (.Status!="baselined"))] | length' "$f" 2>/dev/null || echo 0)
+          echo "net-new critical/high: $new (baselined findings: $baselined)"
+          if [ "$baselined" -eq 0 ] && [ "$NOX_STRICT" != "true" ]; then
+            echo "::notice::No nox baseline established — security gate is report-only. Run 'nox baseline add' and commit .nox/ to enforce net-new critical/high."
+            exit 0
+          fi
           if [ "$new" -gt 0 ]; then
             echo "::error::Net-new critical/high findings. Run 'nox baseline add' or remediate."
-            jq '.findings[] | select((.Severity=="critical" or .Severity=="high") and (.Status!="baselined")) | {severity:.Severity, rule:.RuleID, file:.Location.FilePath, line:.Location.StartLine}' nox-results/findings.json
+            jq '.findings[] | select((.Severity=="critical" or .Severity=="high") and (.Status!="baselined")) | {severity:.Severity, rule:.RuleID, file:.Location.FilePath, line:.Location.StartLine}' "$f"
             exit 1
           fi
       - name: Upload nox artifacts
