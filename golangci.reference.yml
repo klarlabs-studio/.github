@@ -7,10 +7,12 @@ run:
   timeout: 5m
 
 linters:
-  # Mandatory org bar. gocritic is non-negotiable; gosec covers code-level
-  # security alongside the nox scan. gocyclo/dupl are intentionally NOT here
-  # — they are noisy and repo-specific; opt in per repo if a codebase wants
-  # them, but they are not part of the shared gate.
+  # Mandatory org bar. gocritic is non-negotiable. gosec keeps the cheap,
+  # deterministic Go checks (hardcoded creds, weak crypto, int overflow,
+  # file perms); cross-file/interprocedural TAINT SAST (SSRF, injection,
+  # path traversal) is owned by nox's taint-analysis plugin — not gosec —
+  # so the experimental gosec taint rules are disabled below. gocyclo/dupl
+  # are intentionally NOT here (noisy, repo-specific; opt in per repo).
   default: standard
   enable:
     - errcheck
@@ -23,6 +25,14 @@ linters:
     - unparam
     - gocritic     # org engineering bar — do not drop
     - gosec
+  settings:
+    gosec:
+      excludes:
+        # Taint analysis is nox's job (cross-file, interprocedural). gosec's
+        # per-function taint rules are experimental and FP-prone; defer to nox.
+        - G703   # path traversal via taint
+        - G704   # SSRF via taint
+        - G706   # taint flow (misc)
   exclusions:
     rules:
       # Tests legitimately use math/rand (deterministic fixtures, fuzz
