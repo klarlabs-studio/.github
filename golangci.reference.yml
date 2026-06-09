@@ -2,20 +2,22 @@
 # Copy to a repo's root as `.golangci.yml`. gocritic is part of the bar —
 # keep it enabled. Add repo-specific exclusions under `exclusions.rules`.
 #
-# SECURITY NOTE: nox is the primary security tool (secrets, IaC, deps, AI).
-# The plan is for nox to also own code-level taint SAST via its
-# taint-analysis plugin and for gosec to be dropped here — DEFERRED until
-# `nox/taint-analysis` is published at community trust (it is currently
-# unverified and -allow-unverified was declined org-wide). Until then gosec
-# STAYS ENABLED so taint coverage (SSRF, path traversal, etc.) is not lost.
+# SECURITY NOTE: nox is the sole code-level security tool. It owns secrets,
+# IaC, deps, AI, crypto/file-perm rules AND code-level taint SAST (SSRF,
+# path traversal, injection) via the cosign-verified `nox/taint-analysis`
+# plugin, which is now published at community trust and enforced org-wide
+# in go-ci.yml. gosec was therefore DROPPED here — its taint rules
+# (G703/G704/G706) are covered by nox/taint-analysis and its credential/
+# crypto/file-perm rules by nox's core ruleset. Do not re-add gosec; route
+# any code-security gap through nox instead.
 version: "2"
 
 run:
   timeout: 5m
 
 linters:
-  # Mandatory org bar. gocritic is non-negotiable; gosec provides Go
-  # code-level security (incl. taint) until nox's taint plugin is verified.
+  # Mandatory org bar. gocritic is non-negotiable. Code-level security is
+  # owned by nox (see SECURITY NOTE) — no gosec here.
   # gocyclo/dupl are intentionally NOT here (noisy, repo-specific).
   default: standard
   enable:
@@ -28,26 +30,6 @@ linters:
     - unconvert
     - unparam
     - gocritic     # org engineering bar — do not drop
-    - gosec        # security; revisit once nox/taint-analysis is verified
-  settings:
-    gosec:
-      excludes:
-        # FP-prone rules newly enforced by golangci v2.12.2's bundled gosec
-        # (none fired under v2.7.2). Taint (G703/G704/G706) moves to nox once
-        # nox/taint-analysis is verified; G115/G118/G204 are high-noise. gosec
-        # keeps its stable high-signal rules (creds, crypto, file perms).
-        - G115   # integer overflow conversion
-        - G118   # context cancellation in goroutine
-        - G204   # subprocess with variable
-        - G703   # path traversal via taint
-        - G704   # SSRF via taint
-        - G706   # taint flow
-  exclusions:
-    rules:
-      # Tests legitimately use math/rand (deterministic fixtures, fuzz
-      # seeds). G404 weak-RNG does not apply to test code.
-      - path: _test\.go
-        linters: [gosec]
 
 formatters:
   enable:
