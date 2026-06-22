@@ -22,6 +22,7 @@ jobs:
       contents: read
       security-events: write
       pull-requests: write   # required — the reusable's nox job annotates PRs
+      # packages: read       # uncomment if the repo installs private @klarlabs-studio packages from GitHub Packages
     secrets: inherit
     # with:
     #   package-manager: pnpm     # npm (default) | pnpm | yarn
