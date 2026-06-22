@@ -189,6 +189,13 @@ jobs:
     name: Dependency Review
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    # Supplementary, non-blocking: the action errors hard on repos whose
+    # Dependency Graph isn't available (newer/org-restricted repos), which
+    # would block adoption of this workflow. nox's OSV check (Security job)
+    # is the gating dependency-CVE source of truth org-wide; this surfaces
+    # the GitHub advisory view where the graph exists and is skipped, not
+    # fatal, where it doesn't.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
