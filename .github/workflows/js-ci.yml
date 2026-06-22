@@ -53,6 +53,11 @@ jobs:
   checks:
     name: Checks
     runs-on: ubuntu-latest
+    # packages: read so installs can pull private @klarlabs-studio packages
+    # from GitHub Packages (npm.pkg.github.com) via the inherited GITHUB_TOKEN.
+    permissions:
+      contents: read
+      packages: read
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -67,6 +72,11 @@ jobs:
           cache: ${{ inputs.package-manager }}
           cache-dependency-path: ${{ inputs.package-manager == 'pnpm' && format('{0}/pnpm-lock.yaml', inputs.working-directory) || (inputs.package-manager == 'yarn' && format('{0}/yarn.lock', inputs.working-directory) || format('{0}/package-lock.json', inputs.working-directory)) }}
       - name: Install dependencies
+        # NODE_AUTH_TOKEN authenticates GitHub Packages for repos whose .npmrc
+        # points @klarlabs-studio at npm.pkg.github.com (private workspace
+        # packages). Harmless for repos with only public deps.
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           case "${{ inputs.package-manager }}" in
             pnpm) pnpm install --frozen-lockfile ;;
