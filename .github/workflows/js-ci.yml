@@ -44,6 +44,10 @@ on:
         description: "Fail on net-new critical/high even before a baseline exists."
         type: boolean
         default: false
+      run-build:
+        description: "Run the build script. Set false for repos whose build needs setup the reusable doesn't do (e.g. sub-project installs in a monorepo) and is handled in the repo's own integration workflow instead."
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -105,7 +109,7 @@ jobs:
         if: steps.scripts.outputs.test == 'true'
         run: ${{ inputs.package-manager }} run test
       - name: Build
-        if: steps.scripts.outputs.build == 'true'
+        if: inputs.run-build && steps.scripts.outputs.build == 'true'
         run: ${{ inputs.package-manager }} run build
 
   security:
