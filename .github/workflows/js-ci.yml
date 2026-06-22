@@ -76,10 +76,12 @@ jobs:
           cache-dependency-path: ${{ inputs.package-manager == 'pnpm' && format('{0}/pnpm-lock.yaml', inputs.working-directory) || (inputs.package-manager == 'yarn' && format('{0}/yarn.lock', inputs.working-directory) || format('{0}/package-lock.json', inputs.working-directory)) }}
       - name: Install dependencies
         # NODE_AUTH_TOKEN authenticates GitHub Packages for repos whose .npmrc
-        # points @klarlabs-studio at npm.pkg.github.com (private workspace
-        # packages). Harmless for repos with only public deps.
+        # points @klarlabs-studio at npm.pkg.github.com. Prefer a PACKAGES_READ_TOKEN
+        # secret (a read:packages PAT) when present — required for CROSS-repo
+        # private/internal packages, which the default GITHUB_TOKEN cannot read.
+        # Falls back to GITHUB_TOKEN (fine for same-repo packages / public deps).
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           case "${{ inputs.package-manager }}" in
             pnpm) pnpm install --frozen-lockfile ;;
