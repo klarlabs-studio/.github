@@ -53,11 +53,10 @@ jobs:
   checks:
     name: Checks
     runs-on: ubuntu-latest
-    # packages: read so installs can pull private @klarlabs-studio packages
-    # from GitHub Packages (npm.pkg.github.com) via the inherited GITHUB_TOKEN.
-    permissions:
-      contents: read
-      packages: read
+    # No job-level permissions here: a reusable job cannot request more than
+    # the caller granted (that's a startup_failure). The token inherits the
+    # caller job's permissions. Repos pulling private @klarlabs-studio packages
+    # from GitHub Packages add `packages: read` to their caller's permissions.
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
