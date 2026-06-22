@@ -185,22 +185,12 @@ jobs:
           path: nox-results/
           retention-days: 7
 
-  dependency-review:
-    name: Dependency Review
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    # Supplementary, non-blocking: the action errors hard on repos whose
-    # Dependency Graph isn't available (newer/org-restricted repos), which
-    # would block adoption of this workflow. nox's OSV check (Security job)
-    # is the gating dependency-CVE source of truth org-wide; this surfaces
-    # the GitHub advisory view where the graph exists and is skipped, not
-    # fatal, where it doesn't.
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
-        with:
-          fail-on-severity: high
+  # NOTE: a GitHub dependency-review job was removed deliberately. nox's OSV
+  # scan (Security job) is the org's single dependency-CVE source of truth
+  # (see golangci.reference.yml security note), so dependency-review only
+  # duplicated it — and the action errors hard on repos whose Dependency
+  # Graph isn't available, blocking adoption. Route dependency-CVE gating
+  # through nox, not a second tool.
 
   benchmark:
     name: Benchmark
