@@ -1,0 +1,6 @@
+{
+  "name": "klarlabs JS/TS CI",
+  "description": "Shared bar for Node projects: lint, typecheck, test, build (auto-detected scripts) + nox security scan. npm/pnpm/yarn.",
+  "iconName": "nodejs",
+  "categories": ["JavaScript", "TypeScript", "Continuous integration"]
+}

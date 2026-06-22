@@ -1,0 +1,161 @@
+# Reusable JS/TS CI — the klarlabs-studio bar for Node projects.
+#
+# Auto-adapts to each repo: runs lint / typecheck / test / build only when
+# that npm script exists (handles the typecheck vs type-check naming split),
+# and a nox security scan (npm dependency CVEs + secrets, the org's single
+# dependency-CVE source of truth). Cost-aware: one install, dependency cache,
+# concurrency-cancel (set in the caller), docs-only paths ignored.
+#
+# Call it from a repo with a thin wrapper (.github/workflows/ci.yml):
+#
+#   jobs:
+#     ci:
+#       uses: klarlabs-studio/.github/.github/workflows/js-ci.yml@main
+#       permissions:
+#         contents: read
+#         security-events: write
+#       secrets: inherit
+#       with:
+#         package-manager: pnpm     # npm (default) | pnpm | yarn
+#
+# Bump pinned action/tool versions here once; every caller picks it up.
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: "Node.js version."
+        type: string
+        default: "22"
+      package-manager:
+        description: "npm (default) | pnpm | yarn. Drives install + cache + run."
+        type: string
+        default: "npm"
+      working-directory:
+        description: "Path to the package when it is NOT at the repo root (monorepos)."
+        type: string
+        default: "."
+      nox-version:
+        type: string
+        default: "1.3.1"
+      nox-sha256:
+        type: string
+        default: "72a301bd63e82668a9fb58f8e4b311201bc04127cdf6309ec990f02a06953abb"
+      nox-strict:
+        description: "Fail on net-new critical/high even before a baseline exists."
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install pnpm
+        if: inputs.package-manager == 'pnpm'
+        uses: pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d # v4.1.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: ${{ inputs.package-manager }}
+          cache-dependency-path: ${{ inputs.package-manager == 'pnpm' && format('{0}/pnpm-lock.yaml', inputs.working-directory) || (inputs.package-manager == 'yarn' && format('{0}/yarn.lock', inputs.working-directory) || format('{0}/package-lock.json', inputs.working-directory)) }}
+      - name: Install dependencies
+        run: |
+          case "${{ inputs.package-manager }}" in
+            pnpm) pnpm install --frozen-lockfile ;;
+            yarn) yarn install --frozen-lockfile ;;
+            *)    npm ci ;;
+          esac
+      - name: Detect available scripts
+        id: scripts
+        run: |
+          node -e '
+            const s = (require("./package.json").scripts) || {};
+            const fs = require("fs");
+            const w = (k, v) => fs.appendFileSync(process.env.GITHUB_OUTPUT, `${k}=${v}\n`);
+            w("lint", !!s.lint);
+            w("test", !!s.test);
+            w("build", !!s.build);
+            const tc = s.typecheck ? "typecheck" : (s["type-check"] ? "type-check" : "");
+            w("typecheck_name", tc);
+          '
+      - name: Lint
+        if: steps.scripts.outputs.lint == 'true'
+        run: ${{ inputs.package-manager }} run lint
+      - name: Typecheck
+        if: steps.scripts.outputs.typecheck_name != ''
+        run: ${{ inputs.package-manager }} run ${{ steps.scripts.outputs.typecheck_name }}
+      - name: Test
+        if: steps.scripts.outputs.test == 'true'
+        run: ${{ inputs.package-manager }} run test
+      - name: Build
+        if: steps.scripts.outputs.build == 'true'
+        run: ${{ inputs.package-manager }} run build
+
+  security:
+    name: Security (nox)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write   # nox annotate
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install nox (pinned + sha256-verified binary)
+        env:
+          NOX_VERSION: ${{ inputs.nox-version }}
+          NOX_SHA256: ${{ inputs.nox-sha256 }}
+        run: |
+          curl -sL -o nox.tar.gz \
+            "https://github.com/nox-hq/nox/releases/download/v${NOX_VERSION}/nox_${NOX_VERSION}_linux_amd64.tar.gz"
+          echo "${NOX_SHA256}  nox.tar.gz" | sha256sum -c -
+          tar xzf nox.tar.gz && sudo mv nox /usr/local/bin/ && nox version
+      - name: Scan
+        # nox core covers JS/TS dependency CVEs (OSV), secrets, and IaC. The
+        # Go-only taint-analysis plugin is intentionally NOT installed here.
+        run: nox scan ${{ inputs.working-directory }} -format json,sarif -output nox-results || true
+      - name: Upload SARIF to code scanning
+        if: always() && hashFiles('nox-results/findings.sarif') != ''
+        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4
+        with:
+          sarif_file: nox-results/findings.sarif
+      - name: Annotate PR
+        if: github.event_name == 'pull_request' && hashFiles('nox-results/findings.json') != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: nox annotate -input nox-results/findings.json || true
+      - name: Gate on net-new critical/high findings
+        # Self-adjusting: report-only until the repo commits a nox baseline
+        # (or nox-strict is set), then gates net-new critical/high. Adopting
+        # the workflow never breaks a red build on day one.
+        if: always() && hashFiles('nox-results/findings.json') != ''
+        env:
+          NOX_STRICT: ${{ inputs.nox-strict }}
+        run: |
+          f=nox-results/findings.json
+          baselined=$(jq '[.findings[]? | select(.Status=="baselined")] | length' "$f" 2>/dev/null || echo 0)
+          new=$(jq '[.findings[]? | select((.Severity=="critical" or .Severity=="high") and (.Status!="baselined"))] | length' "$f" 2>/dev/null || echo 0)
+          echo "net-new critical/high: $new (baselined findings: $baselined)"
+          if [ "$baselined" -eq 0 ] && [ "$NOX_STRICT" != "true" ]; then
+            echo "::notice::No nox baseline established — security gate is report-only. Run 'nox baseline add' and commit .nox/ to enforce net-new critical/high."
+            exit 0
+          fi
+          if [ "$new" -gt 0 ]; then
+            echo "::error::Net-new critical/high findings. Run 'nox baseline add' or remediate."
+            jq '.findings[] | select((.Severity=="critical" or .Severity=="high") and (.Status!="baselined")) | {severity:.Severity, rule:.RuleID, file:.Location.FilePath, line:.Location.StartLine}' "$f"
+            exit 1
+          fi
+      - name: Upload nox artifacts
+        if: always() && hashFiles('nox-results/**') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nox-results
+          path: nox-results/
+          retention-days: 7
