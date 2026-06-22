@@ -30,11 +30,11 @@ on:
       nox-version:
         description: "nox release version (no leading v)."
         type: string
-        default: "1.1.2"
+        default: "1.3.1"
       nox-sha256:
         description: "sha256 of nox_<version>_linux_amd64.tar.gz (verify on bump)."
         type: string
-        default: "15d2fc546fe8a531eb9fde8e234d47a8326bd4b03bc0787f893c6cc003a8ed20"
+        default: "72a301bd63e82668a9fb58f8e4b311201bc04127cdf6309ec990f02a06953abb"
       nox-strict:
         description: "Fail on net-new critical/high even before a baseline exists. Default: gate only once a baseline is committed."
         type: boolean
@@ -44,9 +44,9 @@ on:
         type: boolean
         default: true
       cross-platform:
-        description: "Add macOS + Windows to the test matrix on push-to-main."
+        description: "Add macOS + Windows to the test matrix on push-to-main. Off by default to save minutes; opt in for repos with OS-specific code (file paths, syscalls, terminal handling)."
         type: boolean
-        default: true
+        default: false
       benchmark:
         description: "Run go test -bench on push-to-main only (off by default to save minutes)."
         type: boolean
