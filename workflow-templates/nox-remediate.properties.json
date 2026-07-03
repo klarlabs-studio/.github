@@ -1,0 +1,6 @@
+{
+  "name": "klarlabs Nox Remediate",
+  "description": "Weekly nox remediation: OSV-vulnerable dependency upgrades + SHA-pinned GitHub Actions. Replaces dependabot, auto-merges when green.",
+  "iconName": "shield",
+  "categories": ["Security", "Dependencies"]
+}
