@@ -110,6 +110,13 @@ jobs:
           git switch -c "$branch"
           git commit -am "chore(security): nox remediation (deps + actions)"
           git push -u origin "$branch"
+          # Ensure the label exists; `gh pr create --label` hard-fails (exit 1,
+          # no PR) in any caller repo that doesn't already have it. --force is
+          # idempotent: creates if missing, updates otherwise, never errors.
+          gh label create dependencies \
+            --color 0366d6 \
+            --description "Pull requests that update a dependency file" \
+            --force >/dev/null 2>&1 || true
           url="$(gh pr create \
             --title "chore(security): nox remediation" \
             --body "Automated remediation by \`nox fix --actions\`: OSV-vulnerable dependency upgrades plus outdated and mutable GitHub Actions pins bumped to their SHA-pinned latest release. Replaces dependabot." \
