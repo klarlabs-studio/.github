@@ -156,7 +156,19 @@ jobs:
         # nox owns code-level SAST: source-to-sink taint (SSRF, injection,
         # path traversal). The plugin is cosign-signed; with cosign present
         # nox promotes it to community trust and installs it (no bypass).
-        run: nox plugin install nox/taint-analysis
+        #
+        # continue-on-error: this is an ENHANCEMENT, not a requirement — the
+        # core SEC/IAC/DATA/VULN rules ship in nox itself. The step sits
+        # BEFORE Scan, so a hard failure here skips the scan, the SARIF
+        # upload AND the gate: a plugin-registry hiccup silently disables
+        # security scanning for every repo on this workflow. It did exactly
+        # that on 2026-07-19, when `@*` began resolving against source
+        # "official" and returning HTTP 404 fleet-wide.
+        #
+        # Pinned for the same reason: the unpinned range is what 404s;
+        # 0.7.0 resolves via community trust. Bump deliberately.
+        continue-on-error: true
+        run: nox plugin install nox/taint-analysis@0.7.0
       - name: Scan
         # Release binaries exit non-zero on any unsuppressed finding; the
         # gate step below decides what is actually fatal (net-new crit/high).
