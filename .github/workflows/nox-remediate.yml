@@ -87,13 +87,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.NOX_TOKEN || secrets.GITHUB_TOKEN }}
           INCLUDE_MAJOR: ${{ inputs.include-major }}
         run: |
-          nox scan . -format json -output . || true
+          # Scan output goes to RUNNER_TEMP, never the working tree: `-output .`
+          # writes findings.json / ai.inventory.json into the repo root, and the
+          # commit below stages tracked modifications, so once such a file has
+          # been committed once it is re-committed by every later run. That is
+          # live today — findings.json rides along in the nomi and dispatch
+          # remediation PRs, ai.inventory.json in senat-os, all auto-merged.
+          out="${RUNNER_TEMP}/nox-scan"
+          mkdir -p "$out"
+          nox scan . -format json -output "$out" || true
           # --actions bumps outdated action pins AND SHA-pins mutable tag refs;
           # the deps pass upgrades any OSV-vulnerable go/npm/pypi/cargo package
           # with a fixed_in version. Default nox fix behaviour is unchanged.
           major=""
           [ "$INCLUDE_MAJOR" = "true" ] && major="--include-major"
-          nox fix --actions $major --input findings.json --root . || true
+          nox fix --actions $major --input "$out/findings.json" --root . || true
           [ -f go.mod ] && go mod tidy || true
 
       - name: Open remediation PR if anything changed
