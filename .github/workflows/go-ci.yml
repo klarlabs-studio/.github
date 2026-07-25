@@ -195,10 +195,10 @@ jobs:
         # gate step below decides what is actually fatal (net-new crit/high).
         run: nox scan ${{ inputs.working-directory }} -format json,sarif -output nox-results || true
       - name: Upload SARIF to code scanning
-        if: always() && hashFiles('nox-results/findings.sarif') != ''
+        if: always() && hashFiles('nox-results/results.sarif') != ''
         uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4
         with:
-          sarif_file: nox-results/findings.sarif
+          sarif_file: nox-results/results.sarif
       - name: Annotate PR
         if: github.event_name == 'pull_request' && hashFiles('nox-results/findings.json') != ''
         env:
@@ -210,11 +210,29 @@ jobs:
         # set). Un-baselined repos are report-only so adopting the shared
         # workflow never breaks a red build — run `nox baseline add` once to
         # turn enforcement on. Baselined repos gate on net-new crit/high.
-        if: always() && hashFiles('nox-results/findings.json') != ''
+        #
+        # Deliberately NOT guarded by hashFiles(findings.json). A missing file
+        # used to skip this step, and a skipped step is green -- so the gate
+        # quietly ceased to exist for any repo where nox wrote no JSON. That is
+        # live today: a repo-level .nox.yaml with `output.format: sarif`
+        # overrides the `-format json,sarif` above, and nexa (20 findings) and
+        # lexora (63) have been passing this job without it ever running.
+        # Absence is now handled in-script and is fatal wherever the repo has
+        # committed a baseline.
+        if: always()
         env:
           NOX_STRICT: ${{ inputs.nox-strict }}
+          WORKDIR: ${{ inputs.working-directory }}
         run: |
           f=nox-results/findings.json
+          if [ ! -f "$f" ]; then
+            if [ -f "${WORKDIR}/.nox/baseline.json" ] || [ "$NOX_STRICT" = "true" ]; then
+              echo "::error::nox wrote no findings.json, so the security gate evaluated nothing. Most likely .nox.yaml sets output.format, which overrides this workflow's '-format json,sarif' -- drop that key, or include json in it."
+              exit 1
+            fi
+            echo "::warning::nox wrote no findings.json, so the security gate evaluated nothing. Report-only (no committed baseline), so not failing the build."
+            exit 0
+          fi
           baselined=$(jq '[.findings[]? | select(.Status=="baselined")] | length' "$f" 2>/dev/null || echo 0)
           new=$(jq '[.findings[]? | select((.Severity=="critical" or .Severity=="high") and (.Status!="baselined"))] | length' "$f" 2>/dev/null || echo 0)
           echo "net-new critical/high: $new (baselined findings: $baselined)"
