@@ -49,8 +49,23 @@ on:
         type: boolean
         default: true
 
+# In a reusable workflow this block is a CEILING, not a default: a caller cannot
+# grant a scope that is absent here, and the excess is dropped silently — the
+# caller's YAML still reads `packages: read` while the job's token does not have
+# it. pet-medical-www declared exactly that, and its install of the private
+# @klarlabs-studio/pet-medical-ui failed with
+#
+#   403 Forbidden — Permission installation not allowed to Read organization package
+#
+# while the job log showed only `Contents: read / Metadata: read /
+# SecurityEvents: write`. That is what a long-lived PAT was quietly working
+# around; when the PAT expired, the underlying gap surfaced.
+#
+# packages: read is read-only and costs nothing for callers that do not use a
+# private registry.
 permissions:
   contents: read
+  packages: read
   security-events: write
 
 jobs:
