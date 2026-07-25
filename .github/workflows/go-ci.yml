@@ -83,9 +83,30 @@ jobs:
           cache-dependency-path: ${{ format('{0}/go.sum', inputs.working-directory) }}
       - run: go mod download
       - run: go mod verify
+      # -count=1 is REQUIRED, not hygiene. setup-go above runs with cache: true,
+      # so GOCACHE — including Go's TEST RESULT cache — is restored across runs
+      # and across commits. Go keys a cached result on the test binary's inputs
+      # (the package's own source plus its transitive imports, and via the
+      # testlog the files the test process opens and the env vars it reads);
+      # work done by a SUBPROCESS, a service container or a preceding CI step is
+      # invisible to it. Any test package whose real subject lives outside its
+      # import graph — one that builds and execs a binary, drives a running
+      # service over HTTP, or asserts against a schema some other step applied —
+      # therefore has inputs that never change, and this job replays a stale
+      # PASS forever without executing anything.
+      #
+      # That is not hypothetical. warden's "End-to-End" required check printed
+      # `ok go.klarlabs.de/warden/e2e (cached)` on every run for weeks while a
+      # real pre-push regression sat on main behind the green gate
+      # (klarlabs-studio/warden#100). This step is the `ci / Test` required
+      # check for a dozen repos; one of them adding such a package is a single
+      # commit away, and there would be no signal that the gate had stopped
+      # working. An always-green check is worse than no check: it is a guarantee
+      # nobody re-examines. Caching test results is worth nothing in CI anyway —
+      # executing them is the entire point of the job.
       - name: Test (race + coverage)
         shell: bash
-        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+        run: go test -count=1 -race -covermode=atomic -coverprofile=coverage.out ./...
       - name: Coverage gate
         if: inputs.coverage && runner.os == 'Linux'
         run: |
