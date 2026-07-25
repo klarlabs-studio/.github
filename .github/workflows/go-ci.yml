@@ -34,11 +34,11 @@ on:
       nox-version:
         description: "nox release version (no leading v)."
         type: string
-        default: "1.10.0"
+        default: "1.16.1"
       nox-sha256:
         description: "sha256 of nox_<version>_linux_amd64.tar.gz (verify on bump)."
         type: string
-        default: "4cc1f33ecc5ae66903ef70aedb20224660c7e1a5bc68b5909b52e8cca127b3e0"
+        default: "e0d7edf53d3b2b34bf899bc19c21e31fe2f5e3757432e51fb453f5d9d521bf7d"
       nox-strict:
         description: "Fail on net-new critical/high even before a baseline exists. Default: gate only once a baseline is committed."
         type: boolean
