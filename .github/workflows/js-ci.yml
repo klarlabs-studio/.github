@@ -149,6 +149,16 @@ jobs:
         # Go-only taint-analysis plugin is intentionally NOT installed here.
         run: nox scan ${{ inputs.working-directory }} -format json,sarif -output nox-results || true
       - name: Upload SARIF to code scanning
+        # Best-effort. Code scanning ingest needs GitHub Advanced Security on
+        # private repos; without it the upload returns "Resource not accessible
+        # by integration" and would fail the whole Security job. Most of the
+        # fleet is private, and the gate below -- not this upload -- is the
+        # enforcement. Same rationale as the taint-plugin install above.
+        #
+        # This only became reachable once the filename was corrected from
+        # findings.sarif to results.sarif: the step had silently skipped since
+        # it was added, so the permission problem had never surfaced.
+        continue-on-error: true
         # `-output nox-results` writes results.sarif and findings.json. The SARIF
         # was looked up as findings.sarif, so hashFiles() never matched and this
         # step has silently skipped on every run since it was added — code

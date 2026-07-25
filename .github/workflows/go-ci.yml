@@ -195,6 +195,16 @@ jobs:
         # gate step below decides what is actually fatal (net-new crit/high).
         run: nox scan ${{ inputs.working-directory }} -format json,sarif -output nox-results || true
       - name: Upload SARIF to code scanning
+        # Best-effort. Code scanning ingest needs GitHub Advanced Security on
+        # private repos; without it the upload returns "Resource not accessible
+        # by integration" and would fail the whole Security job. Most of the
+        # fleet is private, and the gate below -- not this upload -- is the
+        # enforcement. Same rationale as the taint-plugin install above.
+        #
+        # This only became reachable once the filename was corrected from
+        # findings.sarif to results.sarif: the step had silently skipped since
+        # it was added, so the permission problem had never surfaced.
+        continue-on-error: true
         if: always() && hashFiles('nox-results/results.sarif') != ''
         uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4
         with:
