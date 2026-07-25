@@ -127,20 +127,37 @@ jobs:
         env:
           NOX_VERSION: ${{ inputs.nox-version }}
           NOX_SHA256: ${{ inputs.nox-sha256 }}
+        # Unpack in a temp dir, NOT the checkout. The release tarball ships
+        # LICENSE, README.md, bin/ and nox — so extracting here overwrote the
+        # repo's own README.md and LICENSE and left bin/ behind, and the very
+        # next step scanned the result. nox's README documents GitHub Actions
+        # SHA pins, which are 40-hex and match eight vendor API-key regexes, so
+        # every caller got 16 identical phantom "API key" findings with the same
+        # fingerprints across unrelated repos. The scan was corrupting the tree
+        # it was scanning.
         run: |
-          curl -sL -o nox.tar.gz \
+          tmp="$(mktemp -d)"
+          curl -sL -o "$tmp/nox.tar.gz" \
             "https://github.com/nox-hq/nox/releases/download/v${NOX_VERSION}/nox_${NOX_VERSION}_linux_amd64.tar.gz"
-          echo "${NOX_SHA256}  nox.tar.gz" | sha256sum -c -
-          tar xzf nox.tar.gz && sudo mv nox /usr/local/bin/ && nox version
+          echo "${NOX_SHA256}  $tmp/nox.tar.gz" | sha256sum -c -
+          tar xzf "$tmp/nox.tar.gz" -C "$tmp"
+          sudo mv "$tmp/nox" /usr/local/bin/
+          rm -rf "$tmp"
+          nox version
       - name: Scan
         # nox core covers JS/TS dependency CVEs (OSV), secrets, and IaC. The
         # Go-only taint-analysis plugin is intentionally NOT installed here.
         run: nox scan ${{ inputs.working-directory }} -format json,sarif -output nox-results || true
       - name: Upload SARIF to code scanning
-        if: always() && hashFiles('nox-results/findings.sarif') != ''
+        # `-output nox-results` writes results.sarif and findings.json. The SARIF
+        # was looked up as findings.sarif, so hashFiles() never matched and this
+        # step has silently skipped on every run since it was added — code
+        # scanning has received nothing. The JSON path below was correct, which
+        # is why PR annotation worked and this did not.
+        if: always() && hashFiles('nox-results/results.sarif') != ''
         uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4
         with:
-          sarif_file: nox-results/findings.sarif
+          sarif_file: nox-results/results.sarif
       - name: Annotate PR
         if: github.event_name == 'pull_request' && hashFiles('nox-results/findings.json') != ''
         env:
