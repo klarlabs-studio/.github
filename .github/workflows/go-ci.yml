@@ -243,6 +243,28 @@ jobs:
             echo "::warning::nox wrote no findings.json, so the security gate evaluated nothing. Report-only (no committed baseline), so not failing the build."
             exit 0
           fi
+          # A scan can COMPLETE while an analyzer never ran. nox records that in
+          # meta.degradations -- e.g. a plugin listed under `plugins.required` in
+          # .nox.yaml that failed to install. The findings file then looks
+          # perfectly healthy: valid JSON, real findings from the analyzers that
+          # DID run, and no taint findings simply because nothing looked for them.
+          # Indistinguishable from clean.
+          #
+          # Fatal irrespective of baseline state, because `plugins.required` is
+          # opt-in: the repo explicitly declared it needs that analyzer. Repos that
+          # have not opted in produce no degradations and are unaffected.
+          #
+          # This matters most where nox is the ONLY code-level SAST. Once gosec is
+          # dropped (klarlabs-studio/.github#14), a silently missing taint-analysis
+          # plugin means zero injection/SSRF/path-traversal coverage behind a green
+          # check -- the plugin install above is deliberately continue-on-error, so
+          # nothing else would catch it.
+          degraded=$(jq '[.meta.degradations[]?] | length' "$f" 2>/dev/null || echo 0)
+          if [ "$degraded" -gt 0 ]; then
+            echo "::error::nox ran in a DEGRADED state -- an analyzer this repo requires did not run, so its findings are absent rather than clean."
+            jq -r '.meta.degradations[]? | "  \(.kind): \(.detail) -- \(.impact)"' "$f" 2>/dev/null
+            exit 1
+          fi
           baselined=$(jq '[.findings[]? | select(.Status=="baselined")] | length' "$f" 2>/dev/null || echo 0)
           new=$(jq '[.findings[]? | select((.Severity=="critical" or .Severity=="high") and (.Status!="baselined"))] | length' "$f" 2>/dev/null || echo 0)
           echo "net-new critical/high: $new (baselined findings: $baselined)"
