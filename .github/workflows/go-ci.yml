@@ -247,6 +247,25 @@ jobs:
           new=$(jq '[.findings[]? | select((.Severity=="critical" or .Severity=="high") and (.Status!="baselined"))] | length' "$f" 2>/dev/null || echo 0)
           echo "net-new critical/high: $new (baselined findings: $baselined)"
           if [ "$baselined" -eq 0 ] && [ "$NOX_STRICT" != "true" ]; then
+            # A committed baseline that matches NOTHING is not the same as having
+            # no baseline, and treating them alike silently deletes the gate.
+            #
+            # nox v1.3.0 changed the fingerprint algorithm from
+            # sha256(rule‖path‖line‖content) to sha256(rule‖normalised_path‖content),
+            # so every pre-1.3.0 digest stopped matching at once. The repo still
+            # looks triaged — the file is right there in git — but `baselined` is
+            # 0, this branch takes over, and the step exits 0 having evaluated
+            # nothing. bolt, axi-go and nomi sat that way with `Security (nox)` as
+            # a REQUIRED check on public repos; brotwerk sat that way hiding two
+            # net-new critical/high. Nobody noticed, because the symptom is a
+            # green check rather than a red one.
+            #
+            # So: absent baseline stays report-only (adopting the workflow must not
+            # break a build). Present-but-dead is an error naming the fix.
+            if [ -f "${WORKDIR}/.nox/baseline.json" ]; then
+              echo "::error::.nox/baseline.json exists but matched 0 of this scan's findings, so the gate evaluated nothing. This is fingerprint drift, not a clean repo. Run 'nox baseline migrate --prune' to re-fingerprint while preserving each entry's triage reason; if nothing migrates, the baselined findings are genuinely gone and the file should be rebuilt entry by entry."
+              exit 1
+            fi
             echo "::notice::No nox baseline established — security gate is report-only. Run 'nox baseline add' and commit .nox/ to enforce net-new critical/high."
             exit 0
           fi
