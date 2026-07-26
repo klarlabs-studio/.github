@@ -25,11 +25,11 @@ on:
       nox-version:
         description: "nox release version (no leading v)."
         type: string
-        default: "1.17.0"
+        default: "1.19.0"
       nox-sha256:
         description: "sha256 of nox_<version>_linux_amd64.tar.gz (verify on bump)."
         type: string
-        default: "1a7af79d12015e929925effdc428f034cc53f64be2a9099a6706c9e982a06e26"
+        default: "9d1029a686bd8df3477ef3034d65ab477631e7b2cdfee385e2b20295ffe834b8"
       include-major:
         description: "Allow major-version action bumps (off by default; majors are surfaced but held)."
         type: boolean
