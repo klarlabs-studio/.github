@@ -265,6 +265,32 @@ jobs:
             jq -r '.meta.degradations[]? | "  \(.kind): \(.detail) -- \(.impact)"' "$f" 2>/dev/null
             exit 1
           fi
+          # Dedicated code-security rules gate at ANY severity, not just
+          # critical/high.
+          #
+          # WHY: gosec used to cover these and, running under golangci-lint, it
+          # failed the lint job at any severity. It was dropped org-wide on
+          # 2026-06-09 on the premise that nox covered the same ground. nox now
+          # does -- HARDEN (TLS), PERM (world-writable modes), CRYPTO (weak
+          # primitives, predictable randomness) and MEMSAFE (truncation that sizes
+          # memory) -- but most of those rules are rated MEDIUM, honestly, because
+          # that is what they are worth in isolation. Under a critical/high gate
+          # they would never fail a build, so porting the rules would have restored
+          # the coverage on paper and none of the enforcement.
+          #
+          # Severity answers "how bad is one instance"; this list answers "is this
+          # a class we refuse to regress on". Inflating severities to force the
+          # first question to answer the second would misreport risk everywhere
+          # else the severity is read.
+          #
+          # Suppressed findings are excluded: a baseline entry or a VEX statement
+          # is an explicit accept, and this gate only fires on NET-NEW.
+          sec=$(jq '[.findings[]? | select((.RuleID | test("^(HARDEN|PERM|CRYPTO|MEMSAFE)-")) and ((.Status // "") == ""))] | length' "$f" 2>/dev/null || echo 0)
+          if [ "$sec" -gt 0 ]; then
+            echo "::error::$sec net-new code-security finding(s). These gate at any severity -- they are the families gosec used to fail the build on. Remediate, or accept explicitly with a baseline entry or a VEX statement."
+            jq -r '.findings[]? | select((.RuleID | test("^(HARDEN|PERM|CRYPTO|MEMSAFE)-")) and ((.Status // "") == "")) | "  \(.Severity)  \(.RuleID)  \(.Location.FilePath):\(.Location.StartLine)  \(.Message)"' "$f" 2>/dev/null
+            exit 1
+          fi
           baselined=$(jq '[.findings[]? | select(.Status=="baselined")] | length' "$f" 2>/dev/null || echo 0)
           new=$(jq '[.findings[]? | select((.Severity=="critical" or .Severity=="high") and (.Status!="baselined"))] | length' "$f" 2>/dev/null || echo 0)
           echo "net-new critical/high: $new (baselined findings: $baselined)"
