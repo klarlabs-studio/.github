@@ -1,0 +1,122 @@
+# Keeps the fleet's nox pin current.
+#
+# nox-remediate replaces dependabot org-wide — it bumps vulnerable dependencies
+# and stale action pins everywhere. The one thing it cannot bump is the pin that
+# selects nox itself, which lives here as a workflow input default. Nothing
+# watched it, so it drifted: on 2026-08-01 go-ci and js-ci were on 1.24.0 while
+# nox-remediate had sat on 1.19.0 for six releases. The scanner that keeps the
+# fleet current had no-one keeping IT current.
+#
+# This opens a PR and stops. It deliberately does not merge: a nox bump changes
+# what the fleet's security gate reports, and the gate fails on net-new
+# critical/high for the ~30 repos carrying a committed baseline. That wants a
+# human comparing findings across a few repos under both versions before it
+# lands. See the PR body this writes for the exact command.
+name: Nox pin check
+
+on:
+  schedule:
+    # Mondays 06:07 UTC, ten minutes ahead of the 06:17 nox-remediate wave, so a
+    # bump that lands promptly is in place before the week's remediation runs.
+    - cron: "7 6 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: nox-pin-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # Editing .github/workflows/* needs the `workflows` scope, which the
+          # default GITHUB_TOKEN does not carry. Same constraint, same org
+          # secret, as nox-remediate.
+          token: ${{ secrets.NOX_TOKEN }}
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Resolve the latest release and rewrite the pins
+        id: pin
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          out="$(./scripts/nox-pin.sh)"
+          echo "$out"
+          echo "$out" >> "$GITHUB_STEP_SUMMARY"
+          if grep -q '^up-to-date$' <<<"$out"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "latest=$(grep -m1 '^latest:' <<<"$out" | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+            echo "sha=$(grep -m1 '^sha256:' <<<"$out" | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or update the bump PR
+        if: steps.pin.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.NOX_TOKEN }}
+          LATEST: ${{ steps.pin.outputs.latest }}
+          SHA256: ${{ steps.pin.outputs.sha }}
+        run: |
+          set -euo pipefail
+          branch="chore/nox-pin-${LATEST}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add .github/workflows
+          git commit -m "chore(ci): bump the fleet nox pin to ${LATEST}" \
+                     -m "sha256 ${SHA256}, taken from the release's cosign-verified checksums.txt." \
+                     -m "Opened by nox-pin-check. Measure before merging — see the PR body."
+
+          # If an identical branch is already pushed, leave it alone. Re-pushing
+          # the same content churns the PR and, on a fast schedule, can loop.
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            git fetch origin "$branch"
+            if git diff --quiet "origin/${branch}" HEAD; then
+              echo "branch ${branch} already carries this bump; nothing to do"
+              exit 0
+            fi
+          fi
+          git push --force-with-lease -u origin "$branch"
+
+          if gh pr view "$branch" --json state --jq .state 2>/dev/null | grep -q OPEN; then
+            echo "PR already open for ${branch}"
+            exit 0
+          fi
+
+          gh pr create --base main --head "$branch" \
+            --title "chore(ci): bump the fleet nox pin to ${LATEST}" \
+            --body "$(cat <<BODY
+          Opened automatically by \`nox-pin-check\`. **Do not merge without measuring first.**
+
+          nox \`${LATEST}\` is the latest release. \`sha256 ${SHA256}\` comes from that release's \`checksums.txt\`, whose cosign signature was verified against the nox release workflow at this exact tag — so the pinned digest is provably from a signed release rather than whatever the endpoint served.
+
+          ## Why this needs a human
+
+          The fleet's nox gate fails on **net-new critical/high** for every repo with a committed baseline (~30 of them). A release that improves taint recall — which nox does often — adds findings, and that is the direction that red-lines repos.
+
+          Compare a few repos under both versions before merging. Anything that only *removes* findings is safe; anything that adds a critical/high is not:
+
+          \`\`\`sh
+          # in a checkout of a representative repo, with both binaries to hand
+          nox-old scan . && cp findings.json /tmp/old.json
+          nox-new scan . && cp findings.json /tmp/new.json
+          # then diff by fingerprint, and check nothing high/critical is added
+          \`\`\`
+
+          Pick repos across the languages the fleet actually uses, not just Go.
+
+          ## What changed here
+
+          All three reusable workflows move together — \`go-ci\`, \`js-ci\` and \`nox-remediate\`. They are asserted to agree afterwards, because a partial bump is the drift this check exists to end.
+          BODY
+          )"
