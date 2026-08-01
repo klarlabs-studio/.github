@@ -34,11 +34,11 @@ on:
       nox-version:
         description: "nox release version (no leading v)."
         type: string
-        default: "1.25.1"
+        default: "1.26.0"
       nox-sha256:
         description: "sha256 of nox_<version>_linux_amd64.tar.gz (verify on bump)."
         type: string
-        default: "08b59d7e92250efa0c478456e612fcd8e86524f0a40cdf01dae97334e8d6a7c1"
+        default: "6879f8c7b523ebab9920d40919917b422bb952f9252fbadde9061cb37827793c"
       nox-strict:
         description: "Fail on net-new critical/high even before a baseline exists. Default: gate only once a baseline is committed."
         type: boolean
@@ -193,6 +193,17 @@ jobs:
       - name: Scan
         # Release binaries exit non-zero on any unsuppressed finding; the
         # gate step below decides what is actually fatal (net-new crit/high).
+        #
+        # NOX_REQUIRE_PLUGINS declares the plugin installed above. Installing it
+        # is not enough: a plugin only contributes findings when it is declared,
+        # and declaration otherwise lives in a per-repo .nox.yaml that most
+        # repos here do not have. Every one of them was getting the built-in Go
+        # taint model only — TAINT-002/004 but not TAINT-003 — which looks
+        # exactly like working taint analysis (nox-hq/nox#403). Declaring it
+        # here covers every caller at once; it ADDS to whatever a repo declares
+        # for itself, so a repo with its own list keeps it.
+        env:
+          NOX_REQUIRE_PLUGINS: nox/taint-analysis
         run: nox scan ${{ inputs.working-directory }} -format json,sarif -output nox-results || true
       - name: Upload SARIF to code scanning
         # Best-effort. Code scanning ingest needs GitHub Advanced Security on
