@@ -130,4 +130,35 @@ jobs:
             --body "Automated remediation by \`nox fix --actions\`: OSV-vulnerable dependency upgrades plus outdated and mutable GitHub Actions pins bumped to their SHA-pinned latest release. Replaces dependabot." \
             --label dependencies)"
           # Auto-merge once CI is green (same flow dependabot PRs used).
-          gh pr merge --auto --squash "$url" || true
+          #
+          # This used to be `gh pr merge --auto --squash "$url" || true`, and the
+          # `|| true` hid a fleet-wide failure for weeks: on 2026-08-02, 35 of 39
+          # open remediation PRs across both orgs had auto-merge NOT enabled and
+          # had simply been sitting there. Security remediation was accumulating
+          # unmerged with nothing reporting a problem.
+          #
+          # `--auto` fails for two distinct reasons, and both were silent:
+          #
+          #   1. The repository has "Allow auto-merge" turned off. 19 of the
+          #      klarlabs-studio repos were in this state despite having required
+          #      checks, so auto-merge would have worked had the switch been on.
+          #   2. The repository has NO branch protection, so there is nothing for
+          #      auto-merge to wait on and GitHub rejects the request outright.
+          #      All 15 Nox-HQ plugin repos were in this state.
+          #
+          # Case 2 is not an error to route around: with no required checks there
+          # is nothing to wait for, so merging directly is the correct behaviour
+          # rather than a workaround. Case 1 is a genuine misconfiguration, and it
+          # now produces a warning annotation instead of nothing at all.
+          if gh pr merge --auto --squash "$url" 2>/tmp/automerge.err; then
+            echo "nox: auto-merge enabled; will land once CI is green."
+          elif ! gh api "repos/${GITHUB_REPOSITORY}" --jq '.allow_auto_merge' | grep -q true; then
+            echo "::warning::Auto-merge is disabled for this repository, so the remediation PR cannot land on its own. Enable it in Settings -> General -> Pull Requests -> Allow auto-merge. PR: ${url}"
+          else
+            # Auto-merge is permitted but was refused — with no required status
+            # checks there is nothing to gate on. Merge directly rather than
+            # leaving a security fix open indefinitely.
+            echo "nox: no required checks to wait on; merging directly."
+            gh pr merge --squash --delete-branch "$url" \
+              || echo "::warning::Could not merge the remediation PR automatically: $(cat /tmp/automerge.err). It needs a manual merge: ${url}"
+          fi
