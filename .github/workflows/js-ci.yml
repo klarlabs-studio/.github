@@ -49,24 +49,27 @@ on:
         type: boolean
         default: true
 
-# In a reusable workflow this block is a CEILING, not a default: a caller cannot
-# grant a scope that is absent here, and the excess is dropped silently — the
-# caller's YAML still reads `packages: read` while the job's token does not have
-# it. pet-medical-www declared exactly that, and its install of the private
-# @klarlabs-studio/pet-medical-ui failed with
+# No workflow-level permissions block here, deliberately.
 #
-#   403 Forbidden — Permission installation not allowed to Read organization package
+# In a reusable workflow this block is not a default — it is what the jobs
+# request, and the caller must grant at least as much. A scope listed here that
+# a caller does not grant is a startup_failure: the workflow never begins, so it
+# reports no jobs and no check at all, and every PR gating on this context waits
+# forever on a check that cannot arrive.
 #
-# while the job log showed only `Contents: read / Metadata: read /
-# SecurityEvents: write`. That is what a long-lived PAT was quietly working
-# around; when the PAT expired, the underlying gap surfaced.
+# `packages: read` was added here so pet-medical-www could reach the private
+# @klarlabs-studio registry, on the belief that it "costs nothing for callers
+# that do not use a private registry". It cost them their whole pipeline:
+# klarlabs, armada, dispatch and fortify-ts each grant
+# contents/security-events/pull-requests and no packages, and all four sat in
+# startup_failure until this was removed. pet-medical-www, the one caller that
+# granted packages, was the only one still green — which is why it read as
+# working.
 #
-# packages: read is read-only and costs nothing for callers that do not use a
-# private registry.
-permissions:
-  contents: read
-  packages: read
-  security-events: write
+# Omitting the block entirely makes each job inherit exactly what its caller
+# granted, so a caller needing the private registry adds `packages: read` to its
+# own permissions and gets it, and a caller that does not need it is not forced
+# to ask for a scope it has no use for.
 
 jobs:
   checks:
