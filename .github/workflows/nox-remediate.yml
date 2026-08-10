@@ -103,6 +103,35 @@ jobs:
           [ "$INCLUDE_MAJOR" = "true" ] && major="--include-major"
           nox fix --actions $major --input "$out/findings.json" --root . || true
 
+          # Refresh JS lockfiles for any package.json nox just changed.
+          #
+          # `nox fix` upgrades npm packages by editing package.json. It does not
+          # touch the lockfile, and CI installs with --frozen-lockfile, so the
+          # remediation PR failed its own CI on every JS repo in the fleet:
+          #
+          #   ERR_PNPM_OUTDATED_LOCKFILE  Cannot install with "frozen-lockfile"
+          #   because pnpm-lock.yaml is not up to date with package.json
+          #
+          # `go mod tidy` below has always covered the Go side; the npm side had
+          # nothing, so a security fix arrived permanently unmergeable. This runs
+          # BEFORE the remediated/tidied split on purpose: refreshing a lockfile
+          # to match a package.json nox edited IS part of that remediation, not
+          # incidental tidying.
+          #
+          # Lockfile-only where each manager supports it — no node_modules, no
+          # network beyond metadata. Best-effort: a manager that is not
+          # installed leaves the repo as it was rather than failing the run.
+          for manifest in $(git diff --name-only HEAD -- '**package.json' 'package.json'); do
+            dir="$(dirname "$manifest")"
+            if [ -f "$dir/pnpm-lock.yaml" ]; then
+              (cd "$dir" && corepack enable >/dev/null 2>&1; pnpm install --lockfile-only --ignore-scripts) || true
+            elif [ -f "$dir/package-lock.json" ]; then
+              (cd "$dir" && npm install --package-lock-only --ignore-scripts) || true
+            elif [ -f "$dir/yarn.lock" ]; then
+              (cd "$dir" && corepack enable >/dev/null 2>&1; yarn install --mode update-lockfile) || true
+            fi
+          done
+
           # Record whether `nox fix` itself changed anything, BEFORE the tidy
           # pass runs. `go mod tidy` is not remediation — it moves requirements
           # between the direct and indirect blocks and fills in missing go.sum
