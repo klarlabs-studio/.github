@@ -34,11 +34,15 @@ on:
       nox-version:
         description: "nox release version (no leading v)."
         type: string
-        default: "1.27.0"
+        default: "1.29.0"
       nox-sha256:
         description: "sha256 of nox_<version>_linux_amd64.tar.gz (verify on bump)."
         type: string
-        default: "02a6f01575ab959ab971528bdef7d6e0a4c9a7b5c70298b802f1031c77304c5a"
+        default: "b2c0dca2ab4dba4f94a73277f1f50e4196360a1ad87b145b2c2d9cb6e5cc8dc3"
+      govulncheck-version:
+        description: "govulncheck version. Pinned like every other tool here: @latest would make the gate's behaviour a function of the day it ran."
+        type: string
+        default: "v1.7.0"
       nox-strict:
         description: "Fail on net-new critical/high even before a baseline exists. Default: gate only once a baseline is committed."
         type: boolean
@@ -64,6 +68,11 @@ jobs:
   test:
     name: Test
     runs-on: ${{ matrix.os }}
+    # Every job gets a bound, because the default is six hours. A test that
+    # deadlocks, a module fetch that hangs on a broken proxy, a Windows runner
+    # waiting on a prompt nobody will answer — each of those otherwise holds a
+    # runner until a human notices, across every repository calling this bar.
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -116,6 +125,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -137,6 +147,7 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -150,9 +161,37 @@ jobs:
           cache-dependency-path: ${{ format('{0}/go.sum', inputs.working-directory) }}
       - run: go build -v ./...
 
+  vulns:
+    name: Vulnerabilities (govulncheck)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: ${{ inputs.go-version }}
+          go-version-file: ${{ inputs.go-version == '' && format('{0}/go.mod', inputs.working-directory) || '' }}
+          cache: true
+          cache-dependency-path: ${{ format('{0}/go.sum', inputs.working-directory) }}
+      # A known-vulnerable dependency is the one class of finding a code
+      # scanner structurally cannot produce: nothing is wrong with the code in
+      # this repository, and the bar was gating on that alone. govulncheck is
+      # also narrower than a CVE list — it reports only vulnerabilities in
+      # functions this module actually reaches, so a finding here is a call
+      # path somebody has to answer for rather than a number to argue about.
+      - name: govulncheck
+        env:
+          GOVULNCHECK_VERSION: ${{ inputs.govulncheck-version }}
+        run: |
+          go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" ./...
+
   security:
     name: Security (nox)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       security-events: write
