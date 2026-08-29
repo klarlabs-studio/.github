@@ -36,7 +36,7 @@ on:
         default: "."
       nox-version:
         type: string
-        default: "1.30.0"
+        default: "1.31.0"
       nox-sha256:
         type: string
         default: "84a9e18e3bbbbd1566f969007b09e74b7fab2e992154a1a050f65279df171b13"
