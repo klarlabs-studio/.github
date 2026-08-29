@@ -195,7 +195,23 @@ jobs:
             echo "touched=true" >> "$GITHUB_OUTPUT"   # cannot tell; build rather than skip
             exit 0
           fi
-          if git diff --name-only "$base"...HEAD | grep -qE '(^|/)Dockerfile'; then
+          # Only the Dockerfile at the build context root, and only if it
+          # exists. A repository with deploy/Dockerfile or web/Dockerfile would
+          # otherwise match and then be built with a context that has no
+          # Dockerfile in it — this job would fail the pull request for a
+          # Dockerfile it was never pointed at. Narrow first: this covers the
+          # case it was written for, and cannot misfire on the rest.
+          dir="${{ inputs.working-directory }}"
+          dir="${dir:-.}"
+          want="$(printf '%s/Dockerfile' "$dir" | sed 's|^\./||')"
+
+          if [ ! -f "$dir/Dockerfile" ]; then
+            echo "touched=false" >> "$GITHUB_OUTPUT"
+            echo "no Dockerfile at $dir — nothing to smoke build"
+            exit 0
+          fi
+
+          if git diff --name-only "$base"...HEAD | grep -qxF "$want"; then
             echo "touched=true" >> "$GITHUB_OUTPUT"
           else
             echo "touched=false" >> "$GITHUB_OUTPUT"
