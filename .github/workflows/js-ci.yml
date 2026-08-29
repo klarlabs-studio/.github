@@ -39,7 +39,7 @@ on:
         default: "1.31.0"
       nox-sha256:
         type: string
-        default: "84a9e18e3bbbbd1566f969007b09e74b7fab2e992154a1a050f65279df171b13"
+        default: "4c03808feccb2d77c8b65120d7ad259af8ed2d5dfbbc3088b6f0d877fd25a367"
       nox-strict:
         description: "Fail on net-new critical/high even before a baseline exists."
         type: boolean
