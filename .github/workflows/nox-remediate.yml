@@ -25,7 +25,7 @@ on:
       nox-version:
         description: "nox release version (no leading v)."
         type: string
-        default: "1.30.0"
+        default: "1.31.0"
       nox-sha256:
         description: "sha256 of nox_<version>_linux_amd64.tar.gz (verify on bump)."
         type: string
