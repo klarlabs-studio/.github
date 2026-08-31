@@ -36,10 +36,10 @@ on:
         default: "."
       nox-version:
         type: string
-        default: "1.31.0"
+        default: "1.32.0"
       nox-sha256:
         type: string
-        default: "4c03808feccb2d77c8b65120d7ad259af8ed2d5dfbbc3088b6f0d877fd25a367"
+        default: "7acff7c272657f6de66b1cc50478920ccb67b9de257619bbf450bed1128fc7a9"
       nox-strict:
         description: "Fail on net-new critical/high even before a baseline exists."
         type: boolean
