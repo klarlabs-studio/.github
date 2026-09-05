@@ -34,11 +34,11 @@ on:
       nox-version:
         description: "nox release version (no leading v)."
         type: string
-        default: "1.31.0"
+        default: "1.34.0"
       nox-sha256:
         description: "sha256 of nox_<version>_linux_amd64.tar.gz (verify on bump)."
         type: string
-        default: "4c03808feccb2d77c8b65120d7ad259af8ed2d5dfbbc3088b6f0d877fd25a367"
+        default: "4a207ef6d30f260de037d5c9a77379547733c41f84f2d78d657249735fae3de0"
       govulncheck-version:
         description: "govulncheck version. Pinned like every other tool here: @latest would make the gate's behaviour a function of the day it ran."
         type: string
