@@ -371,18 +371,35 @@ jobs:
           # Indistinguishable from clean.
           #
           # Fatal irrespective of baseline state, because `plugins.required` is
-          # opt-in: the repo explicitly declared it needs that analyzer. Repos that
-          # have not opted in produce no degradations and are unaffected.
+          # opt-in: the repo explicitly declared it needs that analyzer.
+          #
+          # ADVISORY entries are excluded, and the filter is not cosmetic. This
+          # check used to count every degradation, on the premise that "repos
+          # that have not opted in produce no degradations and are unaffected".
+          # That premise is false: nox raises a `plugin` degradation listing
+          # installed plugins that are NOT in plugins.required -- the exact
+          # opposite case -- so a runner with an undeclared plugin failed this
+          # gate having asked for nothing. The plugin install step above is
+          # continue-on-error and leaves plugins installed, so this fires in CI
+          # rather than only locally.
+          #
+          # A false RED on the inverse of the condition this gate exists for,
+          # and a gate that fails builds for capability you deliberately did not
+          # enable is one that gets switched off. See Nox-HQ/nox#624, which
+          # ports this whole gate into `nox ci-gate` -- once the fleet pin
+          # reaches that release, this step becomes one invocation and the
+          # filter below goes with it.
           #
           # This matters most where nox is the ONLY code-level SAST. Once gosec is
           # dropped (klarlabs-studio/.github#14), a silently missing taint-analysis
           # plugin means zero injection/SSRF/path-traversal coverage behind a green
           # check -- the plugin install above is deliberately continue-on-error, so
           # nothing else would catch it.
-          degraded=$(jq '[.meta.degradations[]?] | length' "$f" 2>/dev/null || echo 0)
+          advisory='(.impact // "") | contains("add the ones you want to plugins.required") | not'
+          degraded=$(jq "[.meta.degradations[]? | select($advisory)] | length" "$f" 2>/dev/null || echo 0)
           if [ "$degraded" -gt 0 ]; then
             echo "::error::nox ran in a DEGRADED state -- an analyzer this repo requires did not run, so its findings are absent rather than clean."
-            jq -r '.meta.degradations[]? | "  \(.kind): \(.detail) -- \(.impact)"' "$f" 2>/dev/null
+            jq -r ".meta.degradations[]? | select($advisory) | \"  \(.kind): \(.detail) -- \(.impact)\"" "$f" 2>/dev/null
             exit 1
           fi
           # Dedicated code-security rules gate at ANY severity, not just
