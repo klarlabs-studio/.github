@@ -181,10 +181,15 @@ jobs:
         # nox core covers JS/TS dependency CVEs (OSV), secrets, and IaC. Plugins
         # beyond that are the caller's choice: nox auto-installs whatever the
         # repo lists under plugins.required in its own .nox.yaml, which now
-        # works because cosign is present. Unlike go-ci, this job declares no
-        # plugin of its own via NOX_REQUIRE_PLUGINS — that would add findings to
-        # every caller at once, and is a separate decision from repairing the
-        # ones callers already asked for.
+        # works because cosign is present.
+        #
+        # Unlike go-ci, this job sets no NOX_REQUIRE_PLUGINS of its own, and
+        # measurement says it should not: declaring nox/taint-analysis across
+        # all five plugin-less JS callers (armada, dispatch, fortify-ts,
+        # klarlabs, pet-medical-www) adds exactly zero findings. nox core
+        # already reports TAINT-002 on this code; the plugin's extra rules are
+        # the Go-specific ones, which is what the comment replaced here always
+        # said. cosign is what was missing, not a declaration.
         run: nox scan ${{ inputs.working-directory }} -format json,sarif -output nox-results || true
       - name: Upload SARIF to code scanning
         # `-output nox-results` writes results.sarif and findings.json. The SARIF
