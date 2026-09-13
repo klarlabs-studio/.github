@@ -167,9 +167,29 @@ jobs:
           sudo mv "$tmp/nox" /usr/local/bin/
           rm -rf "$tmp"
           nox version
+      - name: Install cosign
+        # nox verifies plugin signatures by shelling out to cosign. Without it,
+        # a signed plugin installs at trust "unverified", the default policy
+        # refuses it ("below minimum community"), and the scan CONTINUES
+        # core-only and exits 0. plugins.required in a caller's .nox.yaml is
+        # therefore documentation, not enforcement: nothing fails, the scan is
+        # just quieter. go-ci has installed cosign since the taint-analysis
+        # plugin was added; this job never did, so every plugin a JS caller
+        # required has been silently skipped.
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Scan
-        # nox core covers JS/TS dependency CVEs (OSV), secrets, and IaC. The
-        # Go-only taint-analysis plugin is intentionally NOT installed here.
+        # nox core covers JS/TS dependency CVEs (OSV), secrets, and IaC. Plugins
+        # beyond that are the caller's choice: nox auto-installs whatever the
+        # repo lists under plugins.required in its own .nox.yaml, which now
+        # works because cosign is present.
+        #
+        # Unlike go-ci, this job sets no NOX_REQUIRE_PLUGINS of its own, and
+        # measurement says it should not: declaring nox/taint-analysis across
+        # all five plugin-less JS callers (armada, dispatch, fortify-ts,
+        # klarlabs, pet-medical-www) adds exactly zero findings. nox core
+        # already reports TAINT-002 on this code; the plugin's extra rules are
+        # the Go-specific ones, which is what the comment replaced here always
+        # said. cosign is what was missing, not a declaration.
         run: nox scan ${{ inputs.working-directory }} -format json,sarif -output nox-results || true
       - name: Upload SARIF to code scanning
         # `-output nox-results` writes results.sarif and findings.json. The SARIF
