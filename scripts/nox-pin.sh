@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Resolve the newest nox release, verify its checksums are signed, and rewrite
-# the three pins. Prints "up-to-date" and exits 0 when nothing needs doing.
+# every pin in WORKFLOWS. Prints "up-to-date" and exits 0 when nothing needs doing.
 #
 # Every failure here is fatal on purpose. A pin checker that shrugs off a failed
 # download or an unverifiable signature is worse than no checker: it reports
@@ -9,7 +9,7 @@
 set -euo pipefail
 
 REPO="${NOX_REPO:-Nox-HQ/nox}"
-WORKFLOWS=(.github/workflows/go-ci.yml .github/workflows/js-ci.yml .github/workflows/nox-remediate.yml)
+WORKFLOWS=(.github/workflows/go-ci.yml .github/workflows/js-ci.yml .github/workflows/nox-remediate.yml .github/workflows/nox.yml)
 
 # Read EVERY pin, not just the first. Reading one and trusting it is how this
 # drifted in the first place: go-ci sat on 1.24.0 while nox-remediate was six
