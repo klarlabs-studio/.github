@@ -206,7 +206,7 @@ jobs:
         # actually runs, and on those repos that meant a red gate for a reason
         # unrelated to any finding. The gate is the net-new critical/high step
         # below; this one only publishes what the gate already decided.
-        continue-on-error: true
+        continue-on-error: true # nox:ignore IAC-018 -- SARIF upload only publishes what the gate already decided; a code-scanning permission problem must not fail the build
         uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4
         with:
           sarif_file: nox-results/results.sarif
