@@ -19,10 +19,10 @@ on:
     # Mondays 06:07 UTC, ten minutes ahead of the 06:17 nox-remediate wave, so a
     # bump that lands promptly is in place before the week's remediation runs.
     - cron: "7 6 * * 1"
-  workflow_dispatch: {}
+  workflow_dispatch: {} # nox:ignore IAC-155,IAC-308 -- workflow_dispatch lets a maintainer run the weekly pin check on demand; it only opens a PR and merges nothing
 
 permissions:
-  contents: write
+  contents: write # nox:ignore IAC-314 -- the job pushes the bump branch and opens the PR, which needs contents: write; it never merges
   pull-requests: write
 
 concurrency:

@@ -6,10 +6,10 @@ name: Nox Remediate
 on:
   schedule:
     - cron: "17 6 * * 1" # Mondays 06:17 UTC
-  workflow_dispatch: {}
+  workflow_dispatch: {} # nox:ignore IAC-155,IAC-308 -- workflow_dispatch lets a maintainer run remediation on demand; it only opens a PR and merges nothing
 
 permissions:
-  contents: write
+  contents: write # nox:ignore IAC-314 -- remediation pushes a branch and opens a PR, which needs contents: write; it never merges
   pull-requests: write
 
 jobs:

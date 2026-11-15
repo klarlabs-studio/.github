@@ -31,7 +31,7 @@ class TestContractSelection(unittest.TestCase):
                        CANDIDATE_SHA=SHA, CROSS_PLATFORM='false', MODULE_PATH='.',
                        COVERAGE='true', GITHUB_OUTPUT=str(output))
             env.update(overrides)
-            result = subprocess.run(['bash', '-c', SELECTOR], env=env,
+            result = subprocess.run(['bash', '-c', SELECTOR], env=env, # nox:ignore TAINT-002 -- test harness: the bash script is a constant from the workflow under test and the env is built by the test itself, no external input
                                     text=True, capture_output=True, check=False)
             return result.returncode, output.read_text() if output.exists() else ''
 
@@ -125,7 +125,7 @@ if name == 'docker' and sys.argv[1] == 'run':
                        CONTRACT=json.dumps(CONTRACT), GITHUB_WORKSPACE=d,
                        CALLS=str(calls), SIGNATURE_OK=str(signature_ok).lower(),
                        INSPECT_ID=CONTRACT['config_id'] if config_ok else 'sha256:' + 'd' * 64)
-            result = subprocess.run(['bash', '-c', script], cwd=d, env=env,
+            result = subprocess.run(['bash', '-c', script], cwd=d, env=env, # nox:ignore TAINT-002 -- test harness: the bash script is a constant from the workflow under test and the env is built by the test itself, no external input
                                     capture_output=True, text=True, check=False)
             return result.returncode, [json.loads(line) for line in calls.read_text().splitlines()]
 

@@ -394,7 +394,7 @@ jobs:
         #
         # Pinned for the same reason: the unpinned range is what 404s;
         # 0.7.0 resolves via community trust. Bump deliberately.
-        continue-on-error: true
+        continue-on-error: true # nox:ignore IAC-018 -- a plugin-registry failure must not skip the scan, SARIF upload and gate that follow (see the comment above); the plugin is optional, core rules ship in nox
         run: nox plugin install nox/taint-analysis@0.7.0
       - name: Scan
         # Release binaries exit non-zero on any unsuppressed finding; the
@@ -421,7 +421,7 @@ jobs:
         # This only became reachable once the filename was corrected from
         # findings.sarif to results.sarif: the step had silently skipped since
         # it was added, so the permission problem had never surfaced.
-        continue-on-error: true
+        continue-on-error: true # nox:ignore IAC-018 -- SARIF upload only publishes what the gate already decided; a code-scanning permission problem must not fail the build
         if: always() && hashFiles('nox-results/results.sarif') != ''
         uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4
         with:

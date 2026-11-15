@@ -40,12 +40,12 @@ on:
         required: false
 
 permissions:
-  contents: write
+  contents: write # nox:ignore IAC-314 -- remediation pushes a branch and opens a PR, which needs contents: write; it never merges
   pull-requests: write
 
 concurrency:
   group: nox-remediate-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: true # nox:ignore IAC-309 -- a newer remediation run for the same ref supersedes the older one; the PR it would open is rebuilt from scratch
 
 jobs:
   remediate:
