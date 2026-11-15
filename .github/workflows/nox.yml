@@ -1,0 +1,160 @@
+# The fleet's nox security scan and gate, for repositories that do not run
+# go-ci or js-ci (which carry the same job). One pin for every caller:
+# scripts/nox-pin.sh rewrites the version and sha256 here with the others.
+#
+# Caller (the whole file):
+#
+#   name: Security
+#   on:
+#     push:
+#       branches: [main]
+#     pull_request:
+#   permissions:
+#     contents: read
+#     security-events: write
+#     pull-requests: write
+#   jobs:
+#     nox:
+#       uses: klarlabs-studio/.github/.github/workflows/nox.yml@main
+#
+# Do not pass nox-version: overriding it is how callers fell behind before.
+name: nox
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: "Directory to scan. Defaults to the repo root."
+        type: string
+        default: "."
+      nox-version:
+        description: "nox release version (no leading v). Leave unset; scripts/nox-pin.sh keeps it current."
+        type: string
+        default: "1.63.0"
+      nox-sha256:
+        description: "sha256 of nox_<version>_linux_amd64.tar.gz (verify on bump)."
+        type: string
+        default: "58c4f348675d2d965e6577bb5d040d387eea82e2d0a4baeb288721f1b0d1b453"
+      nox-strict:
+        description: "Fail on net-new critical/high even before a baseline exists. Default: gate only once a baseline is committed."
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  security:
+    name: Security (nox)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write   # nox annotate
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install nox (pinned + sha256-verified binary)
+        env:
+          NOX_VERSION: ${{ inputs.nox-version }}
+          NOX_SHA256: ${{ inputs.nox-sha256 }}
+        run: |
+          curl -sL -o nox.tar.gz \
+            "https://github.com/nox-hq/nox/releases/download/v${NOX_VERSION}/nox_${NOX_VERSION}_linux_amd64.tar.gz"
+          echo "${NOX_SHA256}  nox.tar.gz" | sha256sum -c -
+          tar xzf nox.tar.gz && sudo mv nox /usr/local/bin/ && nox version
+      - name: Install cosign
+        # nox verifies plugin signatures by shelling out to cosign. Without
+        # it, signed plugins can't be promoted past "unverified" and install
+        # is blocked under the default community-trust policy.
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Install taint-analysis plugin
+        # nox owns code-level SAST: source-to-sink taint (SSRF, injection,
+        # path traversal). The plugin is cosign-signed; with cosign present
+        # nox promotes it to community trust and installs it (no bypass).
+        #
+        # continue-on-error: this is an ENHANCEMENT, not a requirement — the
+        # core SEC/IAC/DATA/VULN rules ship in nox itself. The step sits
+        # BEFORE Scan, so a hard failure here skips the scan, the SARIF
+        # upload AND the gate: a plugin-registry hiccup silently disables
+        # security scanning for every repo on this workflow. It did exactly
+        # that on 2026-07-19, when `@*` began resolving against source
+        # "official" and returning HTTP 404 fleet-wide.
+        #
+        # Pinned for the same reason: the unpinned range is what 404s;
+        # 0.7.0 resolves via community trust. Bump deliberately.
+        continue-on-error: true
+        run: nox plugin install nox/taint-analysis@0.7.0
+      - name: Scan
+        # Release binaries exit non-zero on any unsuppressed finding; the
+        # gate step below decides what is actually fatal (net-new crit/high).
+        #
+        # NOX_REQUIRE_PLUGINS declares the plugin installed above. Installing it
+        # is not enough: a plugin only contributes findings when it is declared,
+        # and declaration otherwise lives in a per-repo .nox.yaml that most
+        # repos here do not have. Every one of them was getting the built-in Go
+        # taint model only — TAINT-002/004 but not TAINT-003 — which looks
+        # exactly like working taint analysis (nox-hq/nox#403). Declaring it
+        # here covers every caller at once; it ADDS to whatever a repo declares
+        # for itself, so a repo with its own list keeps it.
+        env:
+          NOX_REQUIRE_PLUGINS: nox/taint-analysis
+        run: nox scan ${{ inputs.working-directory }} -format json,sarif -output nox-results || true
+      - name: Upload SARIF to code scanning
+        # Best-effort. Code scanning ingest needs GitHub Advanced Security on
+        # private repos; without it the upload returns "Resource not accessible
+        # by integration" and would fail the whole Security job. Most of the
+        # fleet is private, and the gate below -- not this upload -- is the
+        # enforcement. Same rationale as the taint-plugin install above.
+        #
+        # This only became reachable once the filename was corrected from
+        # findings.sarif to results.sarif: the step had silently skipped since
+        # it was added, so the permission problem had never surfaced.
+        continue-on-error: true
+        if: always() && hashFiles('nox-results/results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4
+        with:
+          sarif_file: nox-results/results.sarif
+      - name: Annotate PR
+        if: github.event_name == 'pull_request' && hashFiles('nox-results/findings.json') != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: nox annotate -input nox-results/findings.json || true
+      - name: Gate on net-new critical/high findings
+        # nox's own gate (Nox-HQ/nox#624) replaced the bash that lived here: a
+        # missing findings.json, a required analyzer that did not run, a
+        # code-security family (HARDEN/PERM/CRYPTO/MEMSAFE) at any severity, and
+        # net-new critical/high above a committed baseline. A repo without a
+        # baseline stays report-only unless nox-strict is set; a baseline that
+        # matches nothing is fingerprint drift and fails. Classifying
+        # degradations in nox, not in jq, is what keeps advisory notes (an
+        # unpinned base image, a missing lockfile) from failing builds.
+        #
+        # Deliberately NOT guarded by hashFiles(findings.json): a skipped step
+        # is green, and ci-gate fails on a missing artifact by design.
+        if: always()
+        env:
+          NOX_STRICT: ${{ inputs.nox-strict }}
+          WORKDIR: ${{ inputs.working-directory }}
+        run: |
+          strict=()
+          [ "$NOX_STRICT" = "true" ] && strict=(--strict)
+          nox ci-gate --input nox-results/findings.json \
+            --baseline "${WORKDIR}/.nox/baseline.json" --github "${strict[@]}"
+      - name: Upload nox artifacts
+        if: always() && hashFiles('nox-results/**') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nox-results
+          path: nox-results/
+          retention-days: 7
+
+  # NOTE: a GitHub dependency-review job was removed deliberately. nox's OSV
+  # scan (Security job) is the org's single dependency-CVE source of truth
+  # (see golangci.reference.yml security note), so dependency-review only
+  # duplicated it — and the action errors hard on repos whose Dependency
+  # Graph isn't available, blocking adoption. Route dependency-CVE gating
+  # through nox, not a second tool.
+

@@ -1,0 +1,18 @@
+# Calls the fleet's shared nox scan and gate. For repositories that do not run
+# go-ci or js-ci, which already include it. Do not pass nox-version: the shared
+# workflow's pin is kept current for every caller.
+name: Security
+
+on:
+  push:
+    branches: [$default-branch]
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  nox:
+    uses: klarlabs-studio/.github/.github/workflows/nox.yml@main

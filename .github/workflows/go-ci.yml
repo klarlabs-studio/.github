@@ -34,11 +34,11 @@ on:
       nox-version:
         description: "nox release version (no leading v)."
         type: string
-        default: "1.34.0"
+        default: "1.63.0"
       nox-sha256:
         description: "sha256 of nox_<version>_linux_amd64.tar.gz (verify on bump)."
         type: string
-        default: "4a207ef6d30f260de037d5c9a77379547733c41f84f2d78d657249735fae3de0"
+        default: "58c4f348675d2d965e6577bb5d040d387eea82e2d0a4baeb288721f1b0d1b453"
       govulncheck-version:
         description: "govulncheck version. Pinned like every other tool here: @latest would make the gate's behaviour a function of the day it ran."
         type: string
@@ -432,130 +432,26 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: nox annotate -input nox-results/findings.json || true
       - name: Gate on net-new critical/high findings
-        # Self-adjusting: enforce only once the repo has an established nox
-        # baseline (at least one finding marked "baselined", or nox-strict
-        # set). Un-baselined repos are report-only so adopting the shared
-        # workflow never breaks a red build — run `nox baseline add` once to
-        # turn enforcement on. Baselined repos gate on net-new crit/high.
+        # nox's own gate (Nox-HQ/nox#624) replaced the bash that lived here: a
+        # missing findings.json, a required analyzer that did not run, a
+        # code-security family (HARDEN/PERM/CRYPTO/MEMSAFE) at any severity, and
+        # net-new critical/high above a committed baseline. A repo without a
+        # baseline stays report-only unless nox-strict is set; a baseline that
+        # matches nothing is fingerprint drift and fails. Classifying
+        # degradations in nox, not in jq, is what keeps advisory notes (an
+        # unpinned base image, a missing lockfile) from failing builds.
         #
-        # Deliberately NOT guarded by hashFiles(findings.json). A missing file
-        # used to skip this step, and a skipped step is green -- so the gate
-        # quietly ceased to exist for any repo where nox wrote no JSON. That is
-        # live today: a repo-level .nox.yaml with `output.format: sarif`
-        # overrides the `-format json,sarif` above, and nexa (20 findings) and
-        # lexora (63) have been passing this job without it ever running.
-        # Absence is now handled in-script and is fatal wherever the repo has
-        # committed a baseline.
+        # Deliberately NOT guarded by hashFiles(findings.json): a skipped step
+        # is green, and ci-gate fails on a missing artifact by design.
         if: always()
         env:
           NOX_STRICT: ${{ inputs.nox-strict }}
           WORKDIR: ${{ inputs.working-directory }}
         run: |
-          f=nox-results/findings.json
-          if [ ! -f "$f" ]; then
-            if [ -f "${WORKDIR}/.nox/baseline.json" ] || [ "$NOX_STRICT" = "true" ]; then
-              echo "::error::nox wrote no findings.json, so the security gate evaluated nothing. Most likely .nox.yaml sets output.format, which overrides this workflow's '-format json,sarif' -- drop that key, or include json in it."
-              exit 1
-            fi
-            echo "::warning::nox wrote no findings.json, so the security gate evaluated nothing. Report-only (no committed baseline), so not failing the build."
-            exit 0
-          fi
-          # A scan can COMPLETE while an analyzer never ran. nox records that in
-          # meta.degradations -- e.g. a plugin listed under `plugins.required` in
-          # .nox.yaml that failed to install. The findings file then looks
-          # perfectly healthy: valid JSON, real findings from the analyzers that
-          # DID run, and no taint findings simply because nothing looked for them.
-          # Indistinguishable from clean.
-          #
-          # Fatal irrespective of baseline state, because `plugins.required` is
-          # opt-in: the repo explicitly declared it needs that analyzer.
-          #
-          # ADVISORY entries are excluded, and the filter is not cosmetic. This
-          # check used to count every degradation, on the premise that "repos
-          # that have not opted in produce no degradations and are unaffected".
-          # That premise is false: nox raises a `plugin` degradation listing
-          # installed plugins that are NOT in plugins.required -- the exact
-          # opposite case -- so a runner with an undeclared plugin failed this
-          # gate having asked for nothing. The plugin install step above is
-          # continue-on-error and leaves plugins installed, so this fires in CI
-          # rather than only locally.
-          #
-          # A false RED on the inverse of the condition this gate exists for,
-          # and a gate that fails builds for capability you deliberately did not
-          # enable is one that gets switched off. See Nox-HQ/nox#624, which
-          # ports this whole gate into `nox ci-gate` -- once the fleet pin
-          # reaches that release, this step becomes one invocation and the
-          # filter below goes with it.
-          #
-          # This matters most where nox is the ONLY code-level SAST. Once gosec is
-          # dropped (klarlabs-studio/.github#14), a silently missing taint-analysis
-          # plugin means zero injection/SSRF/path-traversal coverage behind a green
-          # check -- the plugin install above is deliberately continue-on-error, so
-          # nothing else would catch it.
-          advisory='(.impact // "") | contains("add the ones you want to plugins.required") | not'
-          degraded=$(jq "[.meta.degradations[]? | select($advisory)] | length" "$f" 2>/dev/null || echo 0)
-          if [ "$degraded" -gt 0 ]; then
-            echo "::error::nox ran in a DEGRADED state -- an analyzer this repo requires did not run, so its findings are absent rather than clean."
-            jq -r ".meta.degradations[]? | select($advisory) | \"  \(.kind): \(.detail) -- \(.impact)\"" "$f" 2>/dev/null
-            exit 1
-          fi
-          # Dedicated code-security rules gate at ANY severity, not just
-          # critical/high.
-          #
-          # WHY: gosec used to cover these and, running under golangci-lint, it
-          # failed the lint job at any severity. It was dropped org-wide on
-          # 2026-06-09 on the premise that nox covered the same ground. nox now
-          # does -- HARDEN (TLS), PERM (world-writable modes), CRYPTO (weak
-          # primitives, predictable randomness) and MEMSAFE (truncation that sizes
-          # memory) -- but most of those rules are rated MEDIUM, honestly, because
-          # that is what they are worth in isolation. Under a critical/high gate
-          # they would never fail a build, so porting the rules would have restored
-          # the coverage on paper and none of the enforcement.
-          #
-          # Severity answers "how bad is one instance"; this list answers "is this
-          # a class we refuse to regress on". Inflating severities to force the
-          # first question to answer the second would misreport risk everywhere
-          # else the severity is read.
-          #
-          # Suppressed findings are excluded: a baseline entry or a VEX statement
-          # is an explicit accept, and this gate only fires on NET-NEW.
-          sec=$(jq '[.findings[]? | select((.RuleID | test("^(HARDEN|PERM|CRYPTO|MEMSAFE)-")) and ((.Status // "") == ""))] | length' "$f" 2>/dev/null || echo 0)
-          if [ "$sec" -gt 0 ]; then
-            echo "::error::$sec net-new code-security finding(s). These gate at any severity -- they are the families gosec used to fail the build on. Remediate, or accept explicitly with a baseline entry or a VEX statement."
-            jq -r '.findings[]? | select((.RuleID | test("^(HARDEN|PERM|CRYPTO|MEMSAFE)-")) and ((.Status // "") == "")) | "  \(.Severity)  \(.RuleID)  \(.Location.FilePath):\(.Location.StartLine)  \(.Message)"' "$f" 2>/dev/null
-            exit 1
-          fi
-          baselined=$(jq '[.findings[]? | select(.Status=="baselined")] | length' "$f" 2>/dev/null || echo 0)
-          new=$(jq '[.findings[]? | select((.Severity=="critical" or .Severity=="high") and (.Status!="baselined"))] | length' "$f" 2>/dev/null || echo 0)
-          echo "net-new critical/high: $new (baselined findings: $baselined)"
-          if [ "$baselined" -eq 0 ] && [ "$NOX_STRICT" != "true" ]; then
-            # A committed baseline that matches NOTHING is not the same as having
-            # no baseline, and treating them alike silently deletes the gate.
-            #
-            # nox v1.3.0 changed the fingerprint algorithm from
-            # sha256(rule‖path‖line‖content) to sha256(rule‖normalised_path‖content),
-            # so every pre-1.3.0 digest stopped matching at once. The repo still
-            # looks triaged — the file is right there in git — but `baselined` is
-            # 0, this branch takes over, and the step exits 0 having evaluated
-            # nothing. bolt, axi-go and nomi sat that way with `Security (nox)` as
-            # a REQUIRED check on public repos; brotwerk sat that way hiding two
-            # net-new critical/high. Nobody noticed, because the symptom is a
-            # green check rather than a red one.
-            #
-            # So: absent baseline stays report-only (adopting the workflow must not
-            # break a build). Present-but-dead is an error naming the fix.
-            if [ -f "${WORKDIR}/.nox/baseline.json" ]; then
-              echo "::error::.nox/baseline.json exists but matched 0 of this scan's findings, so the gate evaluated nothing. This is fingerprint drift, not a clean repo. Run 'nox baseline migrate --prune' to re-fingerprint while preserving each entry's triage reason; if nothing migrates, the baselined findings are genuinely gone and the file should be rebuilt entry by entry."
-              exit 1
-            fi
-            echo "::notice::No nox baseline established — security gate is report-only. Run 'nox baseline add' and commit .nox/ to enforce net-new critical/high."
-            exit 0
-          fi
-          if [ "$new" -gt 0 ]; then
-            echo "::error::Net-new critical/high findings. Run 'nox baseline add' or remediate."
-            jq '.findings[] | select((.Severity=="critical" or .Severity=="high") and (.Status!="baselined")) | {severity:.Severity, rule:.RuleID, file:.Location.FilePath, line:.Location.StartLine}' "$f"
-            exit 1
-          fi
+          strict=()
+          [ "$NOX_STRICT" = "true" ] && strict=(--strict)
+          nox ci-gate --input nox-results/findings.json \
+            --baseline "${WORKDIR}/.nox/baseline.json" --github "${strict[@]}"
       - name: Upload nox artifacts
         if: always() && hashFiles('nox-results/**') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

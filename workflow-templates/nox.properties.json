@@ -1,0 +1,6 @@
+{
+  "name": "klarlabs nox Security",
+  "description": "The fleet's pinned nox scan and gate, for repositories without go-ci or js-ci. One nox version for every caller.",
+  "iconName": "shield",
+  "categories": ["Security"]
+}
